@@ -19,12 +19,13 @@ import abc
 import collections
 import math
 
+import tensorflow as tf
+
 from magenta.music import constants
 from magenta.music import events_lib
 from magenta.music import sequences_lib
 from magenta.pipelines import statistics
 from magenta.protobuf import music_pb2
-import tensorflow as tf
 
 MAX_MIDI_PITCH = constants.MAX_MIDI_PITCH
 MIN_MIDI_PITCH = constants.MIN_MIDI_PITCH
@@ -57,7 +58,8 @@ class PerformanceEvent(object):
   DURATION = 5
 
   def __init__(self, event_type, event_value):
-    if event_type in (PerformanceEvent.NOTE_ON, PerformanceEvent.NOTE_OFF):
+    if (event_type == PerformanceEvent.NOTE_ON or
+        event_type == PerformanceEvent.NOTE_OFF):
       if not MIN_MIDI_PITCH <= event_value <= MAX_MIDI_PITCH:
         raise ValueError('Invalid pitch value: %s' % event_value)
     elif event_type == PerformanceEvent.TIME_SHIFT:
@@ -390,8 +392,8 @@ class BasePerformance(events_lib.EventSequence):
                                event_value=current_velocity_bin))
 
       # Add a performance event for this note on/off.
-      event_type = (
-          PerformanceEvent.NOTE_OFF if is_offset else PerformanceEvent.NOTE_ON)
+      event_type = (PerformanceEvent.NOTE_OFF if is_offset
+                    else PerformanceEvent.NOTE_ON)
       performance_events.append(
           PerformanceEvent(event_type=event_type,
                            event_value=sorted_notes[idx].pitch))
@@ -500,7 +502,6 @@ class BasePerformance(events_lib.EventSequence):
           sequence.total_time = note.end_time
 
     return sequence
-
 
 class Performance(BasePerformance):
   """Performance with absolute timing and unknown meter."""
@@ -690,15 +691,15 @@ class MetricPerformance(BasePerformance):
     return sequence
 
 
-class NotePerformanceError(Exception):
+class NotePerformanceException(Exception):
   pass
 
 
-class TooManyTimeShiftStepsError(NotePerformanceError):
+class NotePerformanceTooManyTimeShiftSteps(NotePerformanceException):
   pass
 
 
-class TooManyDurationStepsError(NotePerformanceError):
+class NotePerformanceTooManyDurationSteps(NotePerformanceException):
   pass
 
 
@@ -818,9 +819,9 @@ class NotePerformance(BasePerformance):
       A list of events.
 
     Raises:
-      TooManyTimeShiftStepsError: If the maximum number of time
+      NotePerformanceTooManyTimeShiftSteps: If the maximum number of time
         shift steps is exceeded.
-      TooManyDurationStepsError: If the maximum number of duration
+      NotePerformanceTooManyDurationSteps: If the maximum number of duration
         shift steps is exceeded.
     """
     notes = [note for note in quantized_sequence.notes
@@ -837,7 +838,7 @@ class NotePerformance(BasePerformance):
       # TIME_SHIFT
       time_shift_steps = note.quantized_start_step - current_step
       if time_shift_steps > self._max_shift_steps:
-        raise TooManyTimeShiftStepsError(
+        raise NotePerformanceTooManyTimeShiftSteps(
             'Too many steps for timeshift: %d' % time_shift_steps)
       else:
         sub_events.append(
@@ -859,7 +860,7 @@ class NotePerformance(BasePerformance):
       # DURATION
       duration_steps = note.quantized_end_step - note.quantized_start_step
       if duration_steps > self._max_duration_steps:
-        raise TooManyDurationStepsError(
+        raise NotePerformanceTooManyDurationSteps(
             'Too many steps for duration: %s' % note)
       sub_events.append(
           PerformanceEvent(event_type=PerformanceEvent.DURATION,
@@ -945,12 +946,12 @@ def extract_performances(
   """
   sequences_lib.assert_is_quantized_sequence(quantized_sequence)
 
-  stats = dict((stat_name, statistics.Counter(stat_name)) for stat_name in
-               ['performances_discarded_too_short',
-                'performances_truncated', 'performances_truncated_timewise',
-                'performances_discarded_more_than_1_program',
-                'performance_discarded_too_many_time_shift_steps',
-                'performance_discarded_too_many_duration_steps'])
+  stats = dict([(stat_name, statistics.Counter(stat_name)) for stat_name in
+                ['performances_discarded_too_short',
+                 'performances_truncated', 'performances_truncated_timewise',
+                 'performances_discarded_more_than_1_program',
+                 'performance_discarded_too_many_time_shift_steps',
+                 'performance_discarded_too_many_duration_steps']])
 
   if sequences_lib.is_absolute_quantized_sequence(quantized_sequence):
     steps_per_second = quantized_sequence.quantization_info.steps_per_second
@@ -987,14 +988,148 @@ def extract_performances(
         performance = NotePerformance(
             quantized_sequence, start_step=start_step,
             num_velocity_bins=num_velocity_bins, instrument=instrument)
-      except TooManyTimeShiftStepsError:
+      except NotePerformanceTooManyTimeShiftSteps:
         stats['performance_discarded_too_many_time_shift_steps'].increment()
         continue
-      except TooManyDurationStepsError:
+      except NotePerformanceTooManyDurationSteps:
         stats['performance_discarded_too_many_duration_steps'].increment()
         continue
     elif sequences_lib.is_absolute_quantized_sequence(quantized_sequence):
       performance = Performance(quantized_sequence, start_step=start_step,
+                                num_velocity_bins=num_velocity_bins,
+                                instrument=instrument)
+    else:
+      performance = MetricPerformance(quantized_sequence, start_step=start_step,
+                                      num_velocity_bins=num_velocity_bins,
+                                      instrument=instrument)
+
+    if (max_steps_truncate is not None and
+        performance.num_steps > max_steps_truncate):
+      performance.set_length(max_steps_truncate)
+      stats['performances_truncated_timewise'].increment()
+
+    if (max_events_truncate is not None and
+        len(performance) > max_events_truncate):
+      performance.truncate(max_events_truncate)
+      stats['performances_truncated'].increment()
+
+    if min_events_discard is not None and len(performance) < min_events_discard:
+      stats['performances_discarded_too_short'].increment()
+    else:
+      performances.append(performance)
+      if sequences_lib.is_absolute_quantized_sequence(quantized_sequence):
+        stats['performance_lengths_in_seconds'].increment(
+            performance.num_steps // steps_per_second)
+      else:
+        stats['performance_lengths_in_bars'].increment(
+            performance.num_steps // steps_per_bar)
+
+  return performances, stats.values()
+
+
+### TODO COMMENT
+class PerformanceWithMetadata(Performance):
+
+    
+  def __init__(self, composer, quantized_sequence=None,
+               start_step=0, num_velocity_bins=0,
+               max_shift_steps=DEFAULT_MAX_SHIFT_STEPS, instrument=None,
+               program=None, is_drum=None):
+
+    self.composer = composer
+    super(PerformanceWithMetadata, self).__init__(
+      quantized_sequence=quantized_sequence, 
+      steps_per_second=None,
+      start_step=start_step, 
+      num_velocity_bins=num_velocity_bins,
+      max_shift_steps=max_shift_steps, 
+      instrument=instrument)
+
+
+#### TODO COMMENT
+def extract_performances_with_metadata(
+    quantized_sequence, start_step=0, min_events_discard=None,
+    max_events_truncate=None, max_steps_truncate=None, num_velocity_bins=0,
+    split_instruments=False, note_performance=False):
+  """Extracts one or more performances from the given quantized NoteSequence.
+
+  Args:
+    quantized_sequence: A quantized NoteSequence.
+    start_step: Start extracting a sequence at this time step.
+    min_events_discard: Minimum length of tracks in events. Shorter tracks are
+        discarded.
+    max_events_truncate: Maximum length of tracks in events. Longer tracks are
+        truncated.
+    max_steps_truncate: Maximum length of tracks in quantized time steps. Longer
+        tracks are truncated.
+    num_velocity_bins: Number of velocity bins to use. If 0, velocity events
+        will not be included at all.
+    split_instruments: If True, will extract a performance for each instrument.
+        Otherwise, will extract a single performance.
+    note_performance: If True, will create a NotePerformance object. If
+        False, will create either a MetricPerformance or Performance based on
+        how the sequence was quantized.
+
+  Returns:
+    performances: A python list of Performance or MetricPerformance (if
+        `quantized_sequence` is quantized relative to meter) instances.
+    stats: A dictionary mapping string names to `statistics.Statistic` objects.
+  """
+  sequences_lib.assert_is_quantized_sequence(quantized_sequence)
+
+  stats = dict([(stat_name, statistics.Counter(stat_name)) for stat_name in
+                ['performances_discarded_too_short',
+                 'performances_truncated', 'performances_truncated_timewise',
+                 'performances_discarded_more_than_1_program',
+                 'performance_discarded_too_many_time_shift_steps',
+                 'performance_discarded_too_many_duration_steps']])
+
+  if sequences_lib.is_absolute_quantized_sequence(quantized_sequence):
+    steps_per_second = quantized_sequence.quantization_info.steps_per_second
+    # Create a histogram measuring lengths in seconds.
+    stats['performance_lengths_in_seconds'] = statistics.Histogram(
+        'performance_lengths_in_seconds',
+        [5, 10, 20, 30, 40, 60, 120])
+  else:
+    steps_per_bar = sequences_lib.steps_per_bar_in_quantized_sequence(
+        quantized_sequence)
+    # Create a histogram measuring lengths in bars.
+    stats['performance_lengths_in_bars'] = statistics.Histogram(
+        'performance_lengths_in_bars',
+        [1, 10, 20, 30, 40, 50, 100, 200, 500])
+
+  if split_instruments:
+    instruments = set(note.instrument for note in quantized_sequence.notes)
+  else:
+    instruments = set([None])
+    # Allow only 1 program.
+    programs = set()
+    for note in quantized_sequence.notes:
+      programs.add(note.program)
+    if len(programs) > 1:
+      stats['performances_discarded_more_than_1_program'].increment()
+      return [], stats.values()
+
+  performances = []
+
+  for instrument in instruments:
+    # Translate the quantized sequence into a Performance.
+    if note_performance:
+      try:
+        performance = NotePerformance(
+            quantized_sequence.sequence_metadata.artist,
+            quantized_sequence, start_step=start_step,
+            num_velocity_bins=num_velocity_bins, instrument=instrument)
+      except NotePerformanceTooManyTimeShiftSteps:
+        stats['performance_discarded_too_many_time_shift_steps'].increment()
+        continue
+      except NotePerformanceTooManyDurationSteps:
+        stats['performance_discarded_too_many_duration_steps'].increment()
+        continue
+    elif sequences_lib.is_absolute_quantized_sequence(quantized_sequence):
+      composer = quantized_sequence.sequence_metadata.artist
+      performance = PerformanceWithMetadata(composer, quantized_sequence=quantized_sequence, 
+                                start_step=start_step,
                                 num_velocity_bins=num_velocity_bins,
                                 instrument=instrument)
     else:

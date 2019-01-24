@@ -43,6 +43,7 @@ class EncoderPipeline(pipeline.Pipeline):
     self._optional_conditioning = config.optional_conditioning
 
   def transform(self, performance):
+    composer = performance.composer
     if self._control_signals:
       # Encode conditional on control signals.
       control_sequences = []
@@ -59,8 +60,10 @@ class EncoderPipeline(pipeline.Pipeline):
       else:
         encoded = [self._encoder_decoder.encode(
             control_sequence, performance)]
-    else:
+    elif composer:
       # Encode unconditional.
+      encoded = [self._encoder_decoder.encode(performance, composer)]
+    else: 
       encoded = [self._encoder_decoder.encode(performance)]
     return encoded
 
@@ -80,7 +83,15 @@ class PerformanceExtractor(pipeline.Pipeline):
     self._note_performance = note_performance
 
   def transform(self, quantized_sequence):
-    performances, stats = magenta.music.extract_performances(
+    if quantized_sequence.sequence_metadata.artist:
+      performances, stats = magenta.music.extract_performances_with_metadata(
+        quantized_sequence,
+        min_events_discard=self._min_events,
+        max_events_truncate=self._max_events,
+        num_velocity_bins=self._num_velocity_bins,
+        note_performance=self._note_performance)
+    else:
+      performances, stats = magenta.music.extract_performances(
         quantized_sequence,
         min_events_discard=self._min_events,
         max_events_truncate=self._max_events,
@@ -90,7 +101,24 @@ class PerformanceExtractor(pipeline.Pipeline):
     return performances
 
 
-def get_pipeline(config, min_events, max_events, eval_ratio):
+###### TODO, COMMENT
+class MetadataPipeline(pipeline.Pipeline):
+
+  def __init__(self, data, name=None):
+
+    super(MetadataPipeline, self).__init__(
+        input_type=music_pb2.NoteSequence,
+        output_type=music_pb2.NoteSequence,
+        name=name)
+    self.data = data
+
+  def transform(self, note_sequence):
+    composer = self.data.loc[self.data['midi_filename'] == '2017/' + note_sequence.filename].canonical_composer.values[0]
+    note_sequence.sequence_metadata.artist = composer
+    return [note_sequence]
+
+
+def get_pipeline(config, min_events, max_events, eval_ratio, data):
   """Returns the Pipeline instance which creates the RNN dataset.
 
   Args:
@@ -123,7 +151,7 @@ def get_pipeline(config, min_events, max_events, eval_ratio):
     splitter = note_sequence_pipelines.Splitter(
         hop_size_seconds=30.0, name='Splitter_' + mode)
     quantizer = note_sequence_pipelines.Quantizer(
-        steps_per_second=config.steps_per_second, name='Quantizer_' + mode)
+      steps_per_second=config.steps_per_second, name='Quantizer_' + mode)
     transposition_pipeline = note_sequence_pipelines.TranspositionPipeline(
         transposition_range if mode == 'training' else [0],
         name='TranspositionPipeline_' + mode)
@@ -133,14 +161,17 @@ def get_pipeline(config, min_events, max_events, eval_ratio):
         note_performance=config.note_performance,
         name='PerformanceExtractor_' + mode)
     encoder_pipeline = EncoderPipeline(config, name='EncoderPipeline_' + mode)
-
     dag[sustain_pipeline] = partitioner[mode + '_performances']
     dag[stretch_pipeline] = sustain_pipeline
     dag[splitter] = stretch_pipeline
     dag[quantizer] = splitter
     dag[transposition_pipeline] = quantizer
-    dag[perf_extractor] = transposition_pipeline
+    if data is not None:
+      metadata = MetadataPipeline(name='MetaPipeline_' + mode, data=data)
+      dag[metadata] = transposition_pipeline
+      dag[perf_extractor] = metadata
+    else:
+      dag[perf_extractor] = transposition_pipeline
     dag[encoder_pipeline] = perf_extractor
     dag[dag_pipeline.DagOutput(mode + '_performances')] = encoder_pipeline
-
   return dag_pipeline.DAGPipeline(dag)

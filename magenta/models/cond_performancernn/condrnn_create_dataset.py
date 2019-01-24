@@ -21,14 +21,19 @@ NoteSequence within a limited range.
 
 import os
 
-import tensorflow as tf
-
-from magenta.models.performance_rnn import performance_model
-from magenta.models.performance_rnn import performance_rnn_pipeline
+from magenta.models.performance_rnn import models
+from magenta.models.performance_rnn import condrnn_pipeline
 from magenta.pipelines import pipeline
+import tensorflow as tf
+import pandas as pd
+import numpy as np
 
 flags = tf.app.flags
 FLAGS = tf.app.flags.FLAGS
+
+flags.DEFINE_string(
+  'csv', None,
+  'CSV containing metadata.')
 flags.DEFINE_string(
     'input', None,
     'TFRecord to read NoteSequence protos from.')
@@ -49,12 +54,23 @@ flags.DEFINE_string(
 
 def main(unused_argv):
   tf.logging.set_verbosity(FLAGS.log)
+  
+  data = None
+  if FLAGS.csv:
+    csv = os.path.expanduser(FLAGS.csv)
+    tf.logging.info("CSV file provided, populating metadata")
 
-  pipeline_instance = performance_rnn_pipeline.get_pipeline(
+    df = pd.read_csv(csv)
+    composers = np.array(df.groupby('canonical_composer').count().index.values, dtype=np.str)
+    data = df
+
+
+  pipeline_instance = condrnn_pipeline.get_pipeline(
       min_events=32,
       max_events=512,
       eval_ratio=FLAGS.eval_ratio,
-      config=performance_model.default_configs[FLAGS.config])
+      config=model.default_configs[FLAGS.config],
+      data = data)
 
   input_dir = os.path.expanduser(FLAGS.input)
   output_dir = os.path.expanduser(FLAGS.output_dir)

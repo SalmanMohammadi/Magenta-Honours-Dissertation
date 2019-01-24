@@ -74,3 +74,22 @@ class NoteSequenceRecordWriter(tf.python_io.TFRecordWriter):
       note_sequence: A NoteSequence proto to write.
     """
     tf.python_io.TFRecordWriter.write(self, note_sequence.SerializeToString())
+
+class NoteSequenceMetadataRecordWriter(tf.python_io.TFRecordWriter):
+  """A class to write serialized NoteSequence protos to a TFRecord file.
+
+  This class implements `__enter__` and `__exit__`, and can be used in `with`
+  blocks like a normal file.
+
+  @@__init__
+  @@write
+  @@close
+  """
+
+  def write(self, note_sequence):
+    """Serializes a NoteSequence proto and writes it to the file.
+
+    Args:
+      note_sequence: A NoteSequence proto to write.
+    """
+    tf.python_io.TFRecordWriter.write(self, note_sequence.SerializeToString())

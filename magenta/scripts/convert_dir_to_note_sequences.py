@@ -24,11 +24,12 @@ Example usage:
 
 import os
 
+import tensorflow as tf
+
 from magenta.music import abc_parser
 from magenta.music import midi_io
 from magenta.music import musicxml_reader
 from magenta.music import note_sequence_io
-import tensorflow as tf
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -175,7 +176,7 @@ def convert_abc(root_dir, sub_dir, full_file_path):
   try:
     tunes, exceptions = abc_parser.parse_abc_tunebook(
         tf.gfile.FastGFile(full_file_path, 'rb').read())
-  except abc_parser.ABCParseError as e:
+  except abc_parser.ABCParseException as e:
     tf.logging.warning(
         'Could not parse ABC file %s. It will be skipped. Error was: %s',
         full_file_path, e)

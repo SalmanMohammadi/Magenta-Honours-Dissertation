@@ -21,6 +21,27 @@ import tensorflow as tf
 QUEUE_CAPACITY = 500
 SHUFFLE_MIN_AFTER_DEQUEUE = QUEUE_CAPACITY // 5
 
+##### TODO, COMMENT
+def make_sequence_example_with_metadata(inputs, labels, composer):
+  input_features = [
+      tf.train.Feature(float_list=tf.train.FloatList(value=input_))
+      for input_ in inputs]
+  label_features = []
+  for label in labels:
+    if isinstance(label, numbers.Number):
+      label = [label]
+    label_features.append(
+        tf.train.Feature(int64_list=tf.train.Int64List(value=label)))
+
+  composer = tf.train.Features(feature=
+    {'composer': tf.train.Feature(bytes_list=tf.train.BytesList(value=[composer.encode('utf-8')]))}
+    )
+  feature_list = {
+      'inputs': tf.train.FeatureList(feature=input_features),
+      'labels': tf.train.FeatureList(feature=label_features)
+  }
+  feature_lists = tf.train.FeatureLists(feature_list=feature_list)
+  return tf.train.SequenceExample(context=composer, feature_lists=feature_lists)
 
 def make_sequence_example(inputs, labels):
   """Returns a SequenceExample for the given inputs and labels.
@@ -63,6 +84,80 @@ def _shuffle_inputs(input_tensors, capacity, min_after_dequeue, num_threads):
     output_tensors[i].set_shape(input_tensors[i].shape)
 
   return output_tensors
+
+
+### TODO COMMENT
+def get_padded_batch_metadata(file_list, batch_size, input_size, label_shape=None,
+                     num_enqueuing_threads=4, shuffle=False):
+  """Reads batches of SequenceExamples from TFRecords and pads them.
+
+  Can deal with variable length SequenceExamples by padding each batch to the
+  length of the longest sequence with zeros.
+
+  Args:
+    file_list: A list of paths to TFRecord files containing SequenceExamples.
+    batch_size: The number of SequenceExamples to include in each batch.
+    input_size: The size of each input vector. The returned batch of inputs
+        will have a shape [batch_size, num_steps, input_size].
+    label_shape: Shape for labels. If not specified, will use [].
+    num_enqueuing_threads: The number of threads to use for enqueuing
+        SequenceExamples.
+    shuffle: Whether to shuffle the batches.
+
+  Returns:
+    inputs: A tensor of shape [batch_size, num_steps, input_size, label] of floats32s.
+    labels: A tensor of shape [batch_size, num_steps] of int64s.
+    lengths: A tensor of shape [batch_size] of int32s. The lengths of each
+        SequenceExample before padding.
+  Raises:
+    ValueError: If `shuffle` is True and `num_enqueuing_threads` is less than 2.
+  """
+  file_queue = tf.train.string_input_producer(file_list)
+  reader = tf.TFRecordReader()
+  _, serialized_example = reader.read(file_queue)
+
+  sequence_features = {
+      'inputs': tf.FixedLenSequenceFeature(shape=[input_size],
+                                           dtype=tf.float32),
+      'labels': tf.FixedLenSequenceFeature(shape=label_shape or [],
+                                           dtype=tf.int64)
+      }
+
+  context = {
+    'composer': tf.VarLenFeature(dtype=tf.string)
+  }
+
+  context, sequence = tf.parse_single_sequence_example(
+      serialized_example, sequence_features=sequence_features, context_feaures=context)
+
+  length = tf.shape(sequence['inputs'])[0]
+  input_tensors = [sequence['inputs'], sequence['labels'], length, context]
+
+  if shuffle:
+    if num_enqueuing_threads < 2:
+      raise ValueError(
+          '`num_enqueuing_threads` must be at least 2 when shuffling.')
+    shuffle_threads = int(math.ceil(num_enqueuing_threads) / 2.)
+
+    # Since there may be fewer records than SHUFFLE_MIN_AFTER_DEQUEUE, take the
+    # minimum of that number and the number of records.
+    min_after_dequeue = count_records(
+        file_list, stop_at=SHUFFLE_MIN_AFTER_DEQUEUE)
+    input_tensors = _shuffle_inputs(
+        input_tensors, capacity=QUEUE_CAPACITY,
+        min_after_dequeue=min_after_dequeue,
+        num_threads=shuffle_threads)
+
+    num_enqueuing_threads -= shuffle_threads
+
+  tf.logging.info(input_tensors)
+  return tf.data.Dataset.padded_batch(
+      input_tensors,
+      batch_size=batch_size,
+      capacity=QUEUE_CAPACITY,
+      num_threads=num_enqueuing_threads,
+      dynamic_pad=True,
+      allow_smaller_final_batch=False)
 
 
 def get_padded_batch(file_list, batch_size, input_size, label_shape=None,

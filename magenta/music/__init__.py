@@ -53,6 +53,7 @@ from magenta.music.encoder_decoder import LookbackEventSequenceEncoderDecoder
 from magenta.music.encoder_decoder import MultipleEventSequenceEncoder
 from magenta.music.encoder_decoder import OneHotEncoding
 from magenta.music.encoder_decoder import OneHotEventSequenceEncoderDecoder
+from magenta.music.encoder_decoder import OneHotEventSequenceMetaDataEncoderDecoder
 from magenta.music.encoder_decoder import OneHotIndexEventSequenceEncoderDecoder
 from magenta.music.encoder_decoder import OptionalEventSequenceEncoder
 
@@ -103,6 +104,7 @@ from magenta.music.performance_encoder_decoder import PerformanceModuloEncoding
 from magenta.music.performance_encoder_decoder import PerformanceOneHotEncoding
 
 from magenta.music.performance_lib import extract_performances
+from magenta.music.performance_lib import extract_performances_with_metadata
 from magenta.music.performance_lib import MetricPerformance
 from magenta.music.performance_lib import Performance
 

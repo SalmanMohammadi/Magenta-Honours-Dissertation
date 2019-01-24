@@ -1031,3 +1031,21 @@ class EncoderPipeline(pipeline.Pipeline):
   def transform(self, seq):
     encoded = self._encoder_decoder.encode(seq)
     return [encoded]
+
+####### TODO, COMMENT
+class OneHotEventSequenceMetaDataEncoderDecoder(OneHotEventSequenceEncoderDecoder):
+  def encode(self, events, composer):
+    """Returns a SequenceExample for the given event sequence.
+
+    Args:
+      events: A list-like sequence of events.
+
+    Returns:
+      A tf.train.SequenceExample containing inputs and labels.
+    """
+    inputs = []
+    labels = []
+    for i in range(len(events) - 1):
+      inputs.append(self.events_to_input(events, i))
+      labels.append(self.events_to_label(events, i + 1))
+    return sequence_example_lib.make_sequence_example_with_metadata(inputs, labels, composer)

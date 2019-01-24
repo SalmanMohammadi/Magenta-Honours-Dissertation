@@ -15,12 +15,11 @@
 
 import os
 
-import tensorflow as tf
-
 import magenta
 from magenta.models.performance_rnn import performance_model
 from magenta.models.shared import events_rnn_graph
 from magenta.models.shared import events_rnn_train
+import tensorflow as tf
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('run_dir', '/tmp/performance_rnn/logdir/run1',
@@ -90,13 +89,12 @@ def main(unused_argv):
   train_dir = os.path.join(run_dir, 'train')
   tf.gfile.MakeDirs(train_dir)
   tf.logging.info('Train dir: %s', train_dir)
-
   if FLAGS.eval:
     eval_dir = os.path.join(run_dir, 'eval')
     tf.gfile.MakeDirs(eval_dir)
     tf.logging.info('Eval dir: %s', eval_dir)
     num_batches = (
-        (FLAGS.num_eval_examples if FLAGS.num_eval_examples else
+        (FLAGS.num_eval_examples or
          magenta.common.count_records(sequence_example_file_paths)) //
         config.hparams.batch_size)
     events_rnn_train.run_eval(build_graph_fn, train_dir, eval_dir, num_batches)
