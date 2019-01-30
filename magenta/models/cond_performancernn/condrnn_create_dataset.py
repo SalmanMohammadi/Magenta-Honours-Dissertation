@@ -21,8 +21,8 @@ NoteSequence within a limited range.
 
 import os
 
-from magenta.models.performance_rnn import models
-from magenta.models.performance_rnn import condrnn_pipeline
+from magenta.models.cond_performancernn import models
+from magenta.models.cond_performancernn import condrnn_pipeline
 from magenta.pipelines import pipeline
 import tensorflow as tf
 import pandas as pd
@@ -54,15 +54,13 @@ flags.DEFINE_string(
 
 def main(unused_argv):
   tf.logging.set_verbosity(FLAGS.log)
-  
+
   data = None
   if FLAGS.csv:
     csv = os.path.expanduser(FLAGS.csv)
     tf.logging.info("CSV file provided, populating metadata")
 
-    df = pd.read_csv(csv)
-    composers = np.array(df.groupby('canonical_composer').count().index.values, dtype=np.str)
-    data = df
+    data = pd.read_csv(csv)
 
 
   pipeline_instance = condrnn_pipeline.get_pipeline(

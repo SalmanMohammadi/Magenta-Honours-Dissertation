@@ -123,16 +123,15 @@ def get_padded_batch_metadata(file_list, batch_size, input_size, label_shape=Non
                                            dtype=tf.int64)
       }
 
-  context = {
-    'composer': tf.VarLenFeature(dtype=tf.string)
+  context_features = {
+    'composer': tf.FixedLenFeature([], dtype=tf.string)
   }
 
   context, sequence = tf.parse_single_sequence_example(
-      serialized_example, sequence_features=sequence_features, context_feaures=context)
+      serialized_example, sequence_features=sequence_features, context_features=context_features)
 
   length = tf.shape(sequence['inputs'])[0]
-  input_tensors = [sequence['inputs'], sequence['labels'], length, context]
-
+  input_tensors = [sequence['inputs'], sequence['labels'], length, context['composer']]
   if shuffle:
     if num_enqueuing_threads < 2:
       raise ValueError(
@@ -151,7 +150,7 @@ def get_padded_batch_metadata(file_list, batch_size, input_size, label_shape=Non
     num_enqueuing_threads -= shuffle_threads
 
   tf.logging.info(input_tensors)
-  return tf.data.Dataset.padded_batch(
+  return tf.train.batch(
       input_tensors,
       batch_size=batch_size,
       capacity=QUEUE_CAPACITY,

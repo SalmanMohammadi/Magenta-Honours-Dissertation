@@ -7,3 +7,5 @@
 .cache/
 build/
 data/
+venv/
+train/
