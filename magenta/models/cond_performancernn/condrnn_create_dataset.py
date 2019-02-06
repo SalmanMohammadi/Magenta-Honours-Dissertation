@@ -21,8 +21,8 @@ NoteSequence within a limited range.
 
 import os
 
-from magenta.models.cond_performancernn import models
-from magenta.models.cond_performancernn import condrnn_pipeline
+import models
+import condrnn_pipeline
 from magenta.pipelines import pipeline
 import tensorflow as tf
 import pandas as pd

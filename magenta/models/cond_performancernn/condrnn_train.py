@@ -16,9 +16,9 @@
 import os
 
 import magenta
-from magenta.models.cond_performancernn import models
-from magenta.models.cond_performancernn.models import LSTMModel
-from magenta.models.cond_performancernn.models import LSTMConfig
+import models
+from models import LSTMModel
+from models import LSTMConfig
 from magenta.models.shared import events_rnn_graph
 from magenta.models.shared import events_rnn_train
 import tensorflow as tf
