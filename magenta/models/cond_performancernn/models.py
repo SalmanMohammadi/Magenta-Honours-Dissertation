@@ -29,7 +29,7 @@ class BaseModel:
           hooks = [
               tf.train.NanTensorHook(loss),
               tf.train.LoggingTensorHook(
-                  logging_dict, every_n_iter=1),
+                  logging_dict, every_n_iter=60),
               tf.train.StopAtStepHook(steps)
           ]
 
@@ -38,7 +38,7 @@ class BaseModel:
                                     logdir=logdir,
                                     hooks=hooks,
                                     save_checkpoint_secs=save_checkpoint_secs,
-                                    save_summaries_steps=2)
+                                    save_summaries_steps=60)
           tf.logging.info('Training loop complete.')
 
     def evaluate(self):
