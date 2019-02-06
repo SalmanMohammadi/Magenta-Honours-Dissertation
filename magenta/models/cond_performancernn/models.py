@@ -15,6 +15,7 @@ class BaseModel:
 
     def train(self, logdir='log/', save_checkpoint_secs=60, save_summaries_steps=60, steps=1000):
         with tf.Graph().as_default():
+          tf.logging.info('Building graph.')
           self.build_graph_fn()
 
           global_step = tf.train.get_or_create_global_step()
@@ -28,7 +29,7 @@ class BaseModel:
           hooks = [
               tf.train.NanTensorHook(loss),
               tf.train.LoggingTensorHook(
-                  logging_dict, every_n_iter=100),
+                  logging_dict, every_n_iter=1),
               tf.train.StopAtStepHook(steps)
           ]
 
@@ -37,7 +38,7 @@ class BaseModel:
                                     logdir=logdir,
                                     hooks=hooks,
                                     save_checkpoint_secs=save_checkpoint_secs,
-                                    save_summaries_steps=save_summaries_steps)
+                                    save_summaries_steps=2)
           tf.logging.info('Training loop complete.')
 
     def evaluate(self):
@@ -82,12 +83,13 @@ class LSTMModel(BaseModel):
             batch_size = 64
             label_shape = []
             learning_rate = config.learning_rate
-            inputs, labels, lengths = None, None, None
+            inputs, labels, lengths, composers = None, None, None, None
             if mode == 'train' or mode == 'eval':
                 if isinstance(encoder_decoder, mg.music.OneHotEventSequenceMetaDataEncoderDecoder):
                     inputs, labels, lengths, composers = mg.common.get_padded_batch_metadata(
                         examples_path, batch_size, input_size,
-                        label_shape=label_shape, shuffle=mode == 'train')
+                        label_shape=label_shape, shuffle=mode == 'train', 
+                        composer_shape=config.label_classifier_units)
                 else:
                     inputs, labels, lengths = mg.common.get_padded_batch(
                             examples_path, batch_size, input_size,
@@ -107,6 +109,7 @@ class LSTMModel(BaseModel):
                     outputs, lengths)
 
             num_logits = num_classes
+            
             logits_flat = tf.contrib.layers.linear(outputs_flat, num_logits)
 
             if mode == 'train' or mode == 'eval':
@@ -115,11 +118,23 @@ class LSTMModel(BaseModel):
               softmax_cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
                     labels=labels_flat, logits=logits_flat)
 
+              lstm_loss = tf.reduce_mean(softmax_cross_entropy)
+              tf.summary.scalar('lstm_loss', lstm_loss)
               # Predict our composer to enforce structure on embeddings
               if config.label_classifier_weight:
-                  composer_classifier = tf.layers.dense(logits_flat, config.label_classifier_units)
-
-              loss = tf.scalar_mul(tf.Variable(1 - config.label_classifier_weight), tf.reduce_mean(softmax_cross_entropy))
+                tf.logging.info(outputs[-1])
+                tf.logging.info(final_state)
+                tf.logging.info('Building classifier graph.')
+                composer_logits = tf.layers.dense(final_state[1].h, config.label_classifier_units)
+                tf.logging.info(composer_logits)
+                tf.logging.info(composers)
+                composer_softmax_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
+                    labels=composers, logits=composer_logits)
+                composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
+                composer_loss = tf.scalar_mul(tf.Variable(config.label_classifier_weight), composer_loss)
+                tf.summary.scalar('composer_loss', composer_loss)
+                lstm_loss = tf.scalar_mul(tf.Variable(1 - config.label_classifier_weight), lstm_loss)
+                loss = tf.add(loss, composer_loss)
               optimizer = config.optimizer(learning_rate=learning_rate)
               train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer)
 
@@ -146,7 +161,7 @@ class LSTMModel(BaseModel):
 
 class BaseConfig():
     def __init__(self, optimizer, learning_rate):
-        self.optimizer = optimizerlabel_classifier_units
+        self.optimizer = optimizer
         self.learning_rate = learning_rate
 
 class LSTMConfig(BaseConfig):
@@ -157,11 +172,7 @@ class LSTMConfig(BaseConfig):
         self.rnn_layers = rnn_layers
         self.dropouts = dropouts
         self.label_classifier_weight = label_classifier_weight
-        if label_classifier_weight and (not label_classifier_units or not label_classifier_dict):
-            tf.logging.fatal('label_classifier_units and label_classifier_dict required if label_classifier_weight')
-            return
         self.label_classifier_units = label_classifier_units
-        self.label_classifier_dict = label_classifier_dict
 
         super(LSTMConfig, self).__init__(optimizer, learning_rate)
 
@@ -174,10 +185,26 @@ def get_deep_lstm(layers, dropouts):
 def get_composers(csv):
     df = pd.read_csv(csv)
     composers = df[df.midi_filename.str.contains('2017')].groupby('canonical_composer').count().index.values
-    composers = [composer.split(' ')[1] for composer in x]
+    composers = [composer.split(' ')[1] for composer in composers]
     composers = np.sort(np.array(df.groupby('canonical_composer').count().index.values, dtype=np.str))
-    return dict(zip(composers, range(len(composers)))), len(composers)
+    return composers, len(composers)
 
+
+def get_config_with_csv(composer_dict):
+    return PerformanceRnnConfig(
+        mg.protobuf.generator_pb2.GeneratorDetails(
+            id='performance_with_dynamics',
+            description='Conditional Performance RNN with dynamics'),
+        mg.music.OneHotEventSequenceMetaDataEncoderDecoder(
+            mg.music.PerformanceOneHotEncoding(
+                num_velocity_bins=32), composer_dict),
+        tf.contrib.training.HParams(
+            batch_size=64,
+            rnn_layer_sizes=[512, 512, 512],
+            dropout_keep_prob=1.0,
+            clip_norm=3,
+            learning_rate=0.001),
+        num_velocity_bins=32)
 
 default_configs = {
     'performance': PerformanceRnnConfig(

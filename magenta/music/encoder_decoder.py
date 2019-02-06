@@ -1034,6 +1034,14 @@ class EncoderPipeline(pipeline.Pipeline):
 
 ####### TODO, COMMENT
 class OneHotEventSequenceMetaDataEncoderDecoder(OneHotEventSequenceEncoderDecoder):
+  
+  def __init__(self, one_hot_encoding, composers=None):
+    self.composers = composers
+    super().__init__(one_hot_encoding)
+
+  def composer_to_encoding(self, composer):
+    return [int(composer == x) for x in self.composers]
+
   def encode(self, events, composer):
     """Returns a SequenceExample for the given event sequence.
 
@@ -1048,4 +1056,5 @@ class OneHotEventSequenceMetaDataEncoderDecoder(OneHotEventSequenceEncoderDecode
     for i in range(len(events) - 1):
       inputs.append(self.events_to_input(events, i))
       labels.append(self.events_to_label(events, i + 1))
-    return sequence_example_lib.make_sequence_example_with_metadata(inputs, labels, composer)
+    composer_embedding = self.composer_to_encoding(composer)
+    return sequence_example_lib.make_sequence_example_with_metadata(inputs, labels, composer_embedding)

@@ -15,12 +15,12 @@
 
 import os
 
-# import magenta
-# from magenta.models.cond_performancernn import models
-# from magenta.models.cond_performancernn.models import LSTMModel
-# from magenta.models.cond_performancernn.models import LSTMConfig
-# from magenta.models.shared import events_rnn_graph
-# from magenta.models.shared import events_rnn_train
+import magenta
+from magenta.models.cond_performancernn import models
+from magenta.models.cond_performancernn.models import LSTMModel
+from magenta.models.cond_performancernn.models import LSTMConfig
+from magenta.models.shared import events_rnn_graph
+from magenta.models.shared import events_rnn_train
 import tensorflow as tf
 import pandas as pd
 import numpy as np
@@ -29,6 +29,9 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string(
   'csv', None,
   'CSV containing metadata.')
+tf.app.flags.DEFINE_string(
+  'composer_weighting', None,
+  'Weighting for composer loss')
 tf.app.flags.DEFINE_string('run_dir', '/tmp/performance_rnn/logdir/run1',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
@@ -38,12 +41,12 @@ tf.app.flags.DEFINE_string('run_dir', '/tmp/performance_rnn/logdir/run1',
                            'parent directory of `run_dir`. Point TensorBoard '
                            'to the parent directory of `run_dir` to see all '
                            'your runs.')
-tf.app.flags.DEFINE_string('config', 'performance_with_dynamics', 'The config to use')
+tf.app.flags.DEFINE_string('config', 'conditional_performance_with_dynamics', 'The config to use')
 tf.app.flags.DEFINE_string('sequence_example_file', '',
                            'Path to TFRecord file containing '
                            'tf.SequenceExample records for training or '
                            'evaluation.')
-tf.app.flags.DEFINE_integer('num_training_steps', 0,
+tf.app.flags.DEFINE_integer('num_training_steps', 100,
                             'The the number of global training steps your '
                             'model should take before exiting training. '
                             'Leave as 0 to run until terminated manually.')
@@ -75,50 +78,51 @@ tf.app.flags.DEFINE_string(
 def main(unused_argv):
   tf.logging.set_verbosity(FLAGS.log)
 
-  # if not FLAGS.run_dir:
-  #   tf.logging.fatal('--run_dir required')
-  #   return
-  # if not FLAGS.sequence_example_file:
-  #   tf.logging.fatal('--sequence_example_file required')
-  #   return
-  #
-  # sequence_example_file_paths = tf.gfile.Glob(
-  #     os.path.expanduser(FLAGS.sequence_example_file))
-  # run_dir = os.path.expanduser(FLAGS.run_dir)
+  if not FLAGS.run_dir:
+    tf.logging.fatal('--run_dir required')
+    return
+  if not FLAGS.sequence_example_file:
+    tf.logging.fatal('--sequence_example_file required')
+    return
+  
+  sequence_example_file_paths = tf.gfile.Glob(
+      os.path.expanduser(FLAGS.sequence_example_file))
+  run_dir = os.path.expanduser(FLAGS.run_dir)
 
   mode = 'eval' if FLAGS.eval else 'train'
-  # data_config = models.default_configs[FLAGS.config]
-  # data_config.hparams.parse(FLAGS.hparams)
-
-  # steps = FLAGS.num_training_steps
-  # encoder_decoder = data_config.encoder_decoder
-
-  # learning_rate = FLAGS.learning_rate
-
-  # config = LSTMConfig(encoder_decoder=encoder_decoder)
-  # model = LSTMModel(config, mode, sequence_example_file_paths)
-  #
-
+  
+  composers, units = None, None
   if FLAGS.csv:
     csv = os.path.expanduser(FLAGS.csv)
     tf.logging.info("CSV file provided, populating metadata")
-    composers_dict, units = models.get_composers(csv)
-    
+    composers, units = models.get_composers(csv)
+  
+  data_config = models.get_config_with_csv(composers)
+  data_config.hparams.parse(FLAGS.hparams)
 
+  steps = FLAGS.num_training_steps
+  encoder_decoder = data_config.encoder_decoder
+  label_classifier_weight = FLAGS.composer_weighting
 
-  print(composers_dict, units)
-  # if FLAGS.eval:
-  #   eval_dir = os.path.join(run_dir, 'eval')
-  #   tf.gfile.MakeDirs(eval_dir)
-  #   tf.logging.info('Eval dir: %s', eval_dir)
-  #   num_batches = (
-  #       (FLAGS.num_eval_examples or
-  #        magenta.common.count_records(sequence_example_file_paths)) //
-  #       config.hparams.batch_size)
-  #   events_rnn_train.run_eval(build_graph_fn, train_dir, eval_dir, num_batches)
-  #
-  # else:
-  #   model.train(logdir=run_dir, steps=steps)
+  config = LSTMConfig(
+    encoder_decoder=encoder_decoder,
+    label_classifier_units=units,
+    label_classifier_weight=label_classifier_weight)
+  model = LSTMModel(config, mode, sequence_example_file_paths)
+
+  
+  if FLAGS.eval:
+    eval_dir = os.path.join(run_dir, 'eval')
+    tf.gfile.MakeDirs(eval_dir)
+    tf.logging.info('Eval dir: %s', eval_dir)
+    num_batches = (
+        (FLAGS.num_eval_examples or
+         magenta.common.count_records(sequence_example_file_paths)) //
+        config.hparams.batch_size)
+    events_rnn_train.run_eval(build_graph_fn, train_dir, eval_dir, num_batches)
+  
+  else:
+    model.train(logdir=run_dir, steps=steps)
 
 
 def console_entry_point():

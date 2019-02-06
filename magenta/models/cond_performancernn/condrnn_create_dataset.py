@@ -59,16 +59,15 @@ def main(unused_argv):
   if FLAGS.csv:
     csv = os.path.expanduser(FLAGS.csv)
     tf.logging.info("CSV file provided, populating metadata")
-
+    composers, units = models.get_composers(csv)
     data = pd.read_csv(csv)
-
-
+ 
   pipeline_instance = condrnn_pipeline.get_pipeline(
       min_events=32,
       max_events=512,
       eval_ratio=FLAGS.eval_ratio,
-      config=model.default_configs[FLAGS.config],
-      data = data)
+      config=models.get_config_with_csv(composers),
+      data=data)
 
   input_dir = os.path.expanduser(FLAGS.input)
   output_dir = os.path.expanduser(FLAGS.output_dir)

@@ -16,6 +16,7 @@
 import math
 import numbers
 
+
 import tensorflow as tf
 
 QUEUE_CAPACITY = 500
@@ -34,7 +35,7 @@ def make_sequence_example_with_metadata(inputs, labels, composer):
         tf.train.Feature(int64_list=tf.train.Int64List(value=label)))
 
   composer = tf.train.Features(feature=
-    {'composer': tf.train.Feature(bytes_list=tf.train.BytesList(value=[composer.encode('utf-8')]))}
+    {'composer': tf.train.Feature(int64_list=tf.train.Int64List(value=composer))}
     )
   feature_list = {
       'inputs': tf.train.FeatureList(feature=input_features),
@@ -88,7 +89,7 @@ def _shuffle_inputs(input_tensors, capacity, min_after_dequeue, num_threads):
 
 ### TODO COMMENT
 def get_padded_batch_metadata(file_list, batch_size, input_size, label_shape=None,
-                     num_enqueuing_threads=4, shuffle=False):
+                     num_enqueuing_threads=4, shuffle=False, composer_shape=None):
   """Reads batches of SequenceExamples from TFRecords and pads them.
 
   Can deal with variable length SequenceExamples by padding each batch to the
@@ -124,12 +125,13 @@ def get_padded_batch_metadata(file_list, batch_size, input_size, label_shape=Non
       }
 
   context_features = {
-    'composer': tf.FixedLenFeature([], dtype=tf.string)
+    'composer': tf.FixedLenFeature([composer_shape], dtype=tf.int64)
   }
 
   context, sequence = tf.parse_single_sequence_example(
       serialized_example, sequence_features=sequence_features, context_features=context_features)
 
+  print(context['composer'])
   length = tf.shape(sequence['inputs'])[0]
   input_tensors = [sequence['inputs'], sequence['labels'], length, context['composer']]
   if shuffle:
