@@ -1037,7 +1037,7 @@ class OneHotEventSequenceMetaDataEncoderDecoder(OneHotEventSequenceEncoderDecode
   
   def __init__(self, one_hot_encoding, composers=None):
     self.composers = composers
-    super().__init__(one_hot_encoding)
+    super(OneHotEventSequenceMetaDataEncoderDecoder, self).__init__(one_hot_encoding)
 
   def composer_to_encoding(self, composer):
     return [int(composer == x) for x in self.composers]
