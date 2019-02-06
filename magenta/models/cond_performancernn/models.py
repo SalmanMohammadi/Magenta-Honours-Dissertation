@@ -118,27 +118,29 @@ class LSTMModel(BaseModel):
               softmax_cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
                     labels=labels_flat, logits=logits_flat)
 
-              lstm_loss = tf.reduce_mean(softmax_cross_entropy)
-              tf.summary.scalar('lstm_loss', lstm_loss)
+              loss = tf.reduce_mean(softmax_cross_entropy)
+              tf.summary.scalar('lstm_loss', loss)
               # Predict our composer to enforce structure on embeddings
               if config.label_classifier_weight:
-                tf.logging.info(outputs[-1])
-                tf.logging.info(final_state)
-                tf.logging.info('Building classifier graph.')
+
+                tf.logging.info('****Building classifier graph.')
                 composer_logits = tf.layers.dense(final_state[1].h, config.label_classifier_units)
-                tf.logging.info(composer_logits)
-                tf.logging.info(composers)
+
                 composer_softmax_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
                     labels=composers, logits=composer_logits)
                 composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
                 composer_loss = tf.scalar_mul(tf.Variable(config.label_classifier_weight), composer_loss)
-                tf.summary.scalar('composer_loss', composer_loss)
-                lstm_loss = tf.scalar_mul(tf.Variable(1 - config.label_classifier_weight), lstm_loss)
+
+                loss = tf.scalar_mul(tf.Variable(1 - config.label_classifier_weight), loss)
                 loss = tf.add(loss, composer_loss)
+
+                tf.summary.scalar('composer_loss', composer_loss)
+                tf.summary.scalar('total_loss', loss)
+
               optimizer = config.optimizer(learning_rate=learning_rate)
               train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer)
 
-              tf.summary.scalar('loss', loss)
+              
               tf.add_to_collection('loss', loss)
               tf.add_to_collection('train_op', train_op)
               tf.add_to_collection('optimizer', optimizer)
@@ -171,7 +173,7 @@ class LSTMConfig(BaseConfig):
         self.encoder_decoder = encoder_decoder
         self.rnn_layers = rnn_layers
         self.dropouts = dropouts
-        self.label_classifier_weight = label_classifier_weight
+        self.label_classifier_weight = float(label_classifier_weight)
         self.label_classifier_units = label_classifier_units
 
         super(LSTMConfig, self).__init__(optimizer, learning_rate)
