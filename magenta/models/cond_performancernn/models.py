@@ -13,7 +13,7 @@ class BaseModel:
     def get_build_graph_fn(self, config, mode, examples_path):
         pass
 
-    def train(self, logdir='log/', save_checkpoint_secs=60, save_summaries_steps=60, steps=1000):
+    def train(self, logdir='log/', save_checkpoint_secs=60, save_summaries_steps=10, steps=1000, log_steps=10):
         with tf.Graph().as_default():
           tf.logging.info('Building graph.')
           self.build_graph_fn()
@@ -26,10 +26,14 @@ class BaseModel:
               'global_step': global_step,
               'loss': loss
           }
+          if tf.get_collection('lstm_loss') and tf.get_collection('composer_loss'):
+            logging_dict['lstm_loss'] = tf.get_collection('lstm_loss')[0]
+            logging_dict['composer_loss'] = tf.get_collection('composer_loss')[0]
+
           hooks = [
               tf.train.NanTensorHook(loss),
               tf.train.LoggingTensorHook(
-                  logging_dict, every_n_iter=60),
+                  logging_dict, every_n_iter=log_steps),
               tf.train.StopAtStepHook(steps)
           ]
 
@@ -130,8 +134,10 @@ class LSTMModel(BaseModel):
                     labels=composers, logits=composer_logits)
                 composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
                 composer_loss = tf.scalar_mul(tf.Variable(config.label_classifier_weight), composer_loss)
-
+                tf.add_to_collection('lstm_loss', loss)
                 loss = tf.scalar_mul(tf.Variable(1 - config.label_classifier_weight), loss)
+                composer_loss = tf.math.ceil(composer_loss)
+                tf.add_to_collection('composer_loss', composer_loss)
                 loss = tf.add(loss, composer_loss)
 
                 tf.summary.scalar('composer_loss', composer_loss)

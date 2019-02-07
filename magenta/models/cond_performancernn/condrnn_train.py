@@ -29,9 +29,12 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string(
   'csv', None,
   'CSV containing metadata.')
-tf.app.flags.DEFINE_string(
+tf.app.flags.DEFINE_float(
   'composer_weighting', None,
   'Weighting for composer loss')
+tf.app.flags.DEFINE_integer(
+  'log_steps', 10,
+  'When to output log')
 tf.app.flags.DEFINE_string('run_dir', '/tmp/performance_rnn/logdir/run1',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
@@ -59,7 +62,7 @@ tf.app.flags.DEFINE_integer('summary_frequency', 10,
                             '`summary_frequency` steps during training or '
                             'every `summary_frequency` seconds during '
                             'evaluation.')
-tf.app.flags.DEFINE_integer('num_checkpoints', 10,
+tf.app.flags.DEFINE_integer('num_checkpoints', 3,
                             'The number of most recent checkpoints to keep in '
                             'the training directory. Keeps all if 0.')
 tf.app.flags.DEFINE_boolean('eval', False,
@@ -122,7 +125,9 @@ def main(unused_argv):
     events_rnn_train.run_eval(build_graph_fn, train_dir, eval_dir, num_batches)
   
   else:
-    model.train(logdir=run_dir, steps=steps)
+    model.train(logdir=run_dir, steps=steps,
+      save_summaries_steps=FLAGS.summary_frequency,
+      log_steps=FLAGS.log_steps)
 
 
 def console_entry_point():
