@@ -42,7 +42,7 @@ class BaseModel:
                                     logdir=logdir,
                                     hooks=hooks,
                                     save_checkpoint_secs=save_checkpoint_secs,
-                                    save_summaries_steps=60)
+                                    save_summaries_steps=save_summaries_steps)
           tf.logging.info('Training loop complete.')
 
     def evaluate(self):

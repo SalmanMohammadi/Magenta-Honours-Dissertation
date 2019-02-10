@@ -35,6 +35,9 @@ tf.app.flags.DEFINE_float(
 tf.app.flags.DEFINE_integer(
   'log_steps', 10,
   'When to output log')
+tf.app.flags.DEFINE_integer(
+  'checkpoint_secs', 60,
+  'When to save checkpoint')
 tf.app.flags.DEFINE_string('run_dir', '/tmp/performance_rnn/logdir/run1',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
