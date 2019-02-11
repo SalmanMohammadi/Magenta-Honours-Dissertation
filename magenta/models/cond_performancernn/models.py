@@ -49,7 +49,9 @@ class BaseModel:
     def evaluate(self):
         with tf.Graph().as_default():
             self.get_build_graph_fn('eval')()
-            global_step = tf.train.get_or_create_global_step()
+
+            # global_step = tf.train.get_or_create_global_step()
+            global_step = tf.get_collection('global_step')[0]
             loss = tf.get_collection('loss')[0]
             perplexity = tf.get_collection('metrics/perplexity')[0]
             accuracy = tf.get_collection('metrics/accuracy')[0]
@@ -129,6 +131,7 @@ class LSTMModel(BaseModel):
                     labels=labels_flat, logits=logits_flat)
 
               loss = None
+              global_step = tf.Variable(-1, trainable=False)
               # Predict our composer to enforce structure on embeddings
               if config.label_classifier_weight:
 
@@ -141,11 +144,11 @@ class LSTMModel(BaseModel):
 
                 lstm_loss = tf.reduce_mean(softmax_cross_entropy)
 
-                global_step = tf.Variable(0, trainable=False)
                 decay_steps = config.decay_steps
-                classifier_weight = tf.train.polynomial_decay(0.0, global_step,
-                                          decay_steps, config.label_classifier_weight,
-                                          power=0.1)
+                classifier_weight =  config.label_classifier_weight - tf.train.polynomial_decay(
+                                            config.label_classifier_weight, global_step,
+                                            decay_steps, 0.0,
+                                            power=0.2)
                 composer_loss = classifier_weight * composer_loss
                 lstm_loss = (1 - classifier_weight) * lstm_loss
 
@@ -165,9 +168,9 @@ class LSTMModel(BaseModel):
                 tf.summary.scalar('loss')
 
               optimizer = config.optimizer(learning_rate=learning_rate)
-              train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer)
+              train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer, global_step=global_step)
 
-              
+              tf.add_to_collection('global_step', global_step)
               tf.add_to_collection('train_op', train_op)
               tf.add_to_collection('optimizer', optimizer)
             elif mode == 'generate':
@@ -224,9 +227,9 @@ class LSTMAE(BaseModel):
                 swap_memory=True)
         
             decoder_cell = get_deep_lstm(config.rnn_layers, config.dropout)
-            ddecoder_initial_state = final_state_enc[-1].h
+            decoder_initial_state = final_state_enc[-1].h
             if isinstance(decoder_cell.state_size, tuple):
-                decoder_initial_state = tuple([final_state_enc[s].h for s in range(len(decoder_cell.state_size))])
+                decoder_initial_state = tuple([final_state_enc[-1].h for s in decoder_cell.state_size])
 
             outputs, final_state = tf.nn.dynamic_rnn(
                 decoder_cell, inputs, sequence_length=lengths, initial_state=decoder_initial_state,

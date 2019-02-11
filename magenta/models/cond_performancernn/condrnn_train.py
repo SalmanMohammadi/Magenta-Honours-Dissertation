@@ -131,7 +131,6 @@ def main(unused_argv):
     gpu=FLAGS.gpu,
     optimizer=optimizer)
   model = LSTMModel(config, mode, sequence_example_file_paths)
-  # model.build_graph_fn()
   
   if FLAGS.eval:
     eval_dir = os.path.join(run_dir, 'eval')
