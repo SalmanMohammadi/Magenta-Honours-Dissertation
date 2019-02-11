@@ -134,8 +134,9 @@ def main(unused_argv):
     gpu=FLAGS.gpu,
     optimizer=optimizer)
 
-  models = {'LSTM': LSTMModel, 'LSTMAE': LSTMAE}
-  model = LSTMModel(config, mode, sequence_example_file_paths)
+  model_configs = {'LSTM': LSTMModel, 'LSTMAE': LSTMAE}
+  model = model_configs[FLAGS.model](config, mode, sequence_example_file_paths)
+  # model = LSTMModel(config, mode, sequence_example_file_paths)
   
   if FLAGS.eval:
     eval_dir = os.path.join(run_dir, 'eval')
