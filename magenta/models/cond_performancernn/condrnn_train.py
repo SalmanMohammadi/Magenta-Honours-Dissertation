@@ -47,6 +47,9 @@ tf.app.flags.DEFINE_boolean(
 tf.app.flags.DEFINE_string(
   'optimizer', 'AdamOptimizer',
   'Optimizer: RMSPropOptimizer, AdamOptimizer')
+tf.app.flags.DEFINE_string(
+  'model', 'LSTM',
+  'Model: LSTMAE, LSTM')
 tf.app.flags.DEFINE_string('run_dir', '/tmp/performance_rnn/logdir/run1',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
@@ -130,6 +133,8 @@ def main(unused_argv):
     decay_steps=decay_steps,
     gpu=FLAGS.gpu,
     optimizer=optimizer)
+
+  models = {'LSTM': LSTMModel, 'LSTMAE': LSTMAE}
   model = LSTMModel(config, mode, sequence_example_file_paths)
   
   if FLAGS.eval:

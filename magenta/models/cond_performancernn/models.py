@@ -143,6 +143,11 @@ class LSTMModel(BaseModel):
                 composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
 
                 lstm_loss = tf.reduce_mean(softmax_cross_entropy)
+                
+                tf.add_to_collection('composer_loss', composer_loss)
+                tf.add_to_collection('lstm_loss', lstm_loss)
+                tf.summary.scalar('composer_loss', composer_loss)
+                tf.summary.scalar('lstm_loss', lstm_loss)
 
                 decay_steps = config.decay_steps
                 classifier_weight =  config.label_classifier_weight - tf.train.polynomial_decay(
@@ -157,10 +162,6 @@ class LSTMModel(BaseModel):
                 loss = tf.add(lstm_loss, composer_loss)
 
                 tf.add_to_collection('loss', loss)
-                tf.add_to_collection('composer_loss', composer_loss)
-                tf.add_to_collection('lstm_loss', lstm_loss)
-                tf.summary.scalar('composer_loss', composer_loss)
-                tf.summary.scalar('lstm_loss', lstm_loss)
                 tf.summary.scalar('loss', loss)
               else:
                 loss = tf.reduce_mean(softmax_cross_entropy)
@@ -247,31 +248,36 @@ class LSTMAE(BaseModel):
                     labels=labels_flat, logits=logits_flat)
 
               loss = None
+              global_step = tf.Variable(-1, trainable=False)
               # Predict our composer to enforce structure on embeddings
               if config.label_classifier_weight:
 
                 tf.logging.info('****Building classifier graph.')
 
-                composer_logits = tf.layers.dense(final_state_enc[-1].h, config.label_classifier_units)
+                composer_logits = tf.layers.dense(final_state[-1].h, config.label_classifier_units)
                 composer_softmax_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
                     labels=composers, logits=composer_logits)
                 composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
 
                 lstm_loss = tf.reduce_mean(softmax_cross_entropy)
 
-                tf.add_to_collection('composer_loss', composer_loss)
-                tf.add_to_collection('lstm_loss', lstm_loss)
-                tf.summary.scalar('composer_loss', composer_loss)
-                tf.summary.scalar('lstm_loss', lstm_loss)
-
-                composer_loss = config.label_classifier_weight * composer_loss
-                lstm_loss = (1 - config.label_classifier_weight) * lstm_loss
+                decay_steps = config.decay_steps
+                classifier_weight =  config.label_classifier_weight - tf.train.polynomial_decay(
+                                            config.label_classifier_weight, global_step,
+                                            decay_steps, 0.0,
+                                            power=0.2)
+                composer_loss = classifier_weight * composer_loss
+                lstm_loss = (1 - classifier_weight) * lstm_loss
 
                 composer_loss = tf.maximum(tf.Variable(0.0), composer_loss)
                 
                 loss = tf.add(lstm_loss, composer_loss)
 
                 tf.add_to_collection('loss', loss)
+                tf.add_to_collection('composer_loss', composer_loss)
+                tf.add_to_collection('lstm_loss', lstm_loss)
+                tf.summary.scalar('composer_loss', composer_loss)
+                tf.summary.scalar('lstm_loss', lstm_loss)
                 tf.summary.scalar('loss', loss)
               else:
                 loss = tf.reduce_mean(softmax_cross_entropy)
@@ -279,9 +285,9 @@ class LSTMAE(BaseModel):
                 tf.summary.scalar('loss')
 
               optimizer = config.optimizer(learning_rate=learning_rate)
-              train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer)
+              train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer, global_step=global_step)
 
-              
+              tf.add_to_collection('global_step', global_step)
               tf.add_to_collection('train_op', train_op)
               tf.add_to_collection('optimizer', optimizer)
             elif mode == 'generate':
