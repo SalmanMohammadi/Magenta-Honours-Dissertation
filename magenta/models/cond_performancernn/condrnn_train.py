@@ -17,7 +17,7 @@ import os
 
 import magenta
 import models
-from models import LSTMModel
+from models import LSTMModel, LSTMAE
 from models import LSTMConfig
 from magenta.models.shared import events_rnn_graph
 from magenta.models.shared import events_rnn_train
@@ -38,6 +38,12 @@ tf.app.flags.DEFINE_integer(
 tf.app.flags.DEFINE_integer(
   'checkpoint_secs', 60,
   'When to save checkpoint')
+tf.app.flags.DEFINE_integer(
+  'decay_steps', 2000,
+  'When to introduce composer loss')
+tf.app.flags.DEFINE_boolean(
+  'gpu', False,
+  'Whether to use CudNN')
 tf.app.flags.DEFINE_string('run_dir', '/tmp/performance_rnn/logdir/run1',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
@@ -109,13 +115,16 @@ def main(unused_argv):
   steps = FLAGS.num_training_steps
   encoder_decoder = data_config.encoder_decoder
   label_classifier_weight = FLAGS.composer_weighting
+  decay_steps = FLAGS.decay_steps
 
   config = LSTMConfig(
     encoder_decoder=encoder_decoder,
     label_classifier_units=units,
-    label_classifier_weight=label_classifier_weight)
+    label_classifier_weight=label_classifier_weight,
+    decay_steps=decay_steps,
+    gpu=FLAGS.gpu)
   model = LSTMModel(config, mode, sequence_example_file_paths)
-
+  # model.build_graph_fn()
   
   if FLAGS.eval:
     eval_dir = os.path.join(run_dir, 'eval')

@@ -1,4 +1,5 @@
 from tensorflow.python.util import nest as tf_nest
+from tensorflow.contrib.cudnn_rnn.python.layers import cudnn_rnn
 import tensorflow as tf
 import magenta as mg
 import pandas as pd
@@ -101,13 +102,18 @@ class LSTMModel(BaseModel):
             else:
               inputs = tf.placeholder(tf.float32, [batch_size, None,
                                                    input_size])
-            config.dropouts = [1.0 if mode == 'generate' else dropout for dropout in config.dropouts]
+            config.dropout = 1.0 if mode == 'generate' else config.dropout
 
-            cell = get_deep_lstm(config.rnn_layers, config.dropouts)
-            initial_state = cell.zero_state(batch_size, tf.float32)
-            outputs, final_state = tf.nn.dynamic_rnn(
-                cell, inputs, sequence_length=lengths, initial_state=initial_state,
-                swap_memory=True)
+            outputs, initial_state, final_state = None, None, None
+            if config.gpu:
+                outputs, initial_state, final_state = get_cudnn(
+                    inputs, config.rnn_layers, config.dropout, batch_size, mode)
+            else:
+                cell = get_deep_lstm(config.rnn_layers, config.dropout)
+                initial_state = cell.zero_state(batch_size, tf.float32)
+                outputs, final_state = tf.nn.dynamic_rnn(
+                    cell, inputs, sequence_length=lengths, initial_state=initial_state,
+                    swap_memory=True)
 
             outputs_flat = mg.common.flatten_maybe_padded_sequences(
                     outputs, lengths)
@@ -128,7 +134,122 @@ class LSTMModel(BaseModel):
 
                 tf.logging.info('****Building classifier graph.')
 
-                composer_logits = tf.layers.dense(final_state[1].h, config.label_classifier_units)
+                composer_logits = tf.layers.dense(final_state[-1].h, config.label_classifier_units)
+                composer_softmax_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
+                    labels=composers, logits=composer_logits)
+                composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
+
+                lstm_loss = tf.reduce_mean(softmax_cross_entropy)
+
+                global_step = tf.Variable(0, trainable=False)
+                decay_steps = config.decay_steps
+                classifier_weight = tf.train.polynomial_decay(0.0, global_step,
+                                          decay_steps, config.label_classifier_weight,
+                                          power=0.1)
+                composer_loss = classifier_weight * composer_loss
+                lstm_loss = (1 - classifier_weight) * lstm_loss
+
+                composer_loss = tf.maximum(tf.Variable(0.0), composer_loss)
+                
+                loss = tf.add(lstm_loss, composer_loss)
+
+                tf.add_to_collection('loss', loss)
+                tf.add_to_collection('composer_loss', composer_loss)
+                tf.add_to_collection('lstm_loss', lstm_loss)
+                tf.summary.scalar('composer_loss', composer_loss)
+                tf.summary.scalar('lstm_loss', lstm_loss)
+                tf.summary.scalar('loss', loss)
+              else:
+                loss = tf.reduce_mean(softmax_cross_entropy)
+                tf.add_to_collection('loss', loss)
+                tf.summary.scalar('loss')
+
+              optimizer = config.optimizer(learning_rate=learning_rate)
+              train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer)
+
+              
+              tf.add_to_collection('train_op', train_op)
+              tf.add_to_collection('optimizer', optimizer)
+            elif mode == 'generate':
+              temperature = tf.placeholder(tf.float32, [])
+              softmax_flat = tf.nn.softmax(
+                    tf.div(logits_flat, tf.fill([num_classes], temperature)))
+              softmax = tf.reshape(
+                    softmax_flat, [batch_size, -1, num_classes])
+
+              tf.add_to_collection('inputs', inputs)
+              tf.add_to_collection('temperature', temperature)
+              tf.add_to_collection('softmax', softmax)
+
+              for state in tf_nest.flatten(initial_state):
+                tf.add_to_collection('initial_state', state)
+              for state in tf_nest.flatten(final_state):
+                tf.add_to_collection('final_state', state)
+        return build_graph
+
+class LSTMAE(BaseModel):
+
+    def get_build_graph_fn(self, config, mode, examples_path):
+
+        def build_graph():
+
+            encoder_decoder = config.encoder_decoder
+            input_size = encoder_decoder.input_size
+            num_classes = encoder_decoder.num_classes
+            default_event_label = encoder_decoder.default_event_label
+
+            batch_size = 64
+            label_shape = []
+            learning_rate = config.learning_rate
+            inputs, labels, lengths, composers = None, None, None, None
+            if mode == 'train' or mode == 'eval':
+                if isinstance(encoder_decoder, mg.music.OneHotEventSequenceMetaDataEncoderDecoder):
+                    inputs, labels, lengths, composers = mg.common.get_padded_batch_metadata(
+                        examples_path, batch_size, input_size,
+                        label_shape=label_shape, shuffle=mode == 'train', 
+                        composer_shape=config.label_classifier_units)
+                else:
+                    inputs, labels, lengths = mg.common.get_padded_batch(
+                            examples_path, batch_size, input_size,
+                            label_shape=label_shape, shuffle=mode == 'train')
+            else:
+              inputs = tf.placeholder(tf.float32, [batch_size, None,
+                                                   input_size])
+            config.dropout = 1.0 if mode == 'generate' else config.dropout
+
+            encoder_cell = get_deep_lstm(config.rnn_layers, config.dropout)
+            initial_state = encoder_cell.zero_state(batch_size, tf.float32)
+            outputs_enc, final_state_enc = tf.nn.dynamic_rnn(
+                encoder_cell, inputs, sequence_length=lengths, initial_state=initial_state,
+                swap_memory=True)
+        
+            decoder_cell = get_deep_lstm(config.rnn_layers, config.dropout)
+            ddecoder_initial_state = final_state_enc[-1].h
+            if isinstance(decoder_cell.state_size, tuple):
+                decoder_initial_state = tuple([final_state_enc[s].h for s in range(len(decoder_cell.state_size))])
+
+            outputs, final_state = tf.nn.dynamic_rnn(
+                decoder_cell, inputs, sequence_length=lengths, initial_state=decoder_initial_state,
+                swap_memory=True)
+
+            outputs_flat = mg.common.flatten_maybe_padded_sequences(
+                    outputs, lengths)
+            num_logits = num_classes
+            logits_flat = tf.contrib.layers.linear(outputs_flat, num_logits)
+
+            if mode == 'train' or mode == 'eval':
+              labels_flat = mg.common.flatten_maybe_padded_sequences(
+                      labels, lengths)
+              softmax_cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                    labels=labels_flat, logits=logits_flat)
+
+              loss = None
+              # Predict our composer to enforce structure on embeddings
+              if config.label_classifier_weight:
+
+                tf.logging.info('****Building classifier graph.')
+
+                composer_logits = tf.layers.dense(final_state_enc[-1].h, config.label_classifier_units)
                 composer_softmax_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
                     labels=composers, logits=composer_logits)
                 composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
@@ -183,20 +304,72 @@ class BaseConfig():
         self.learning_rate = learning_rate
 
 class LSTMConfig(BaseConfig):
-    def __init__(self, encoder_decoder, optimizer=tf.train.RMSPropOptimizer, learning_rate=0.01,
-        rnn_layers=[512,512], dropouts=[0.7, 0.7], label_classifier_weight=None, 
-        label_classifier_units=None, label_classifier_dict=None):
+    def __init__(self, encoder_decoder, optimizer=tf.train.AdamOptimizer, learning_rate=0.01,
+        rnn_layers=[512, 512], dropout=0.7, label_classifier_weight=None, 
+        label_classifier_units=None, label_classifier_dict=None, decay_steps=2000, gpu=False):
         self.encoder_decoder = encoder_decoder
         self.rnn_layers = rnn_layers
-        self.dropouts = dropouts
+        self.dropout = dropout
         self.label_classifier_weight = label_classifier_weight
         self.label_classifier_units = label_classifier_units
+        self.decay_steps = decay_steps
+        self.gpu = gpu
 
         super(LSTMConfig, self).__init__(optimizer, learning_rate)
 
-def get_deep_lstm(layers, dropouts):
+def state_tuples_to_cudnn_lstm_state(lstm_state_tuples):
+  """Convert LSTMStateTuples to CudnnLSTM format."""
+  h = tf.stack([s.h for s in lstm_state_tuples])
+  c = tf.stack([s.c for s in lstm_state_tuples])
+  return (h, c)
+
+
+def cudnn_lstm_state_to_state_tuples(cudnn_lstm_state):
+  """Convert CudnnLSTM format to LSTMStateTuples."""
+  h, c = cudnn_lstm_state
+  return tuple(
+      tf.contrib.rnn.LSTMStateTuple(h=h_i, c=c_i)
+      for h_i, c_i in zip(tf.unstack(h), tf.unstack(c)))
+
+def get_cudnn(inputs, layers, dropout, batch_size, mode):
+    cudnn_inputs = tf.transpose(inputs, [1, 0, 2])
+    initial_state = tuple(
+        tf.contrib.rnn.LSTMStateTuple(
+            h=tf.zeros([batch_size, num_units], dtype=tf.float32),
+            c=tf.zeros([batch_size, num_units], dtype=tf.float32))
+        for num_units in layers)
+    outputs, final_state = None, None
+    if mode != 'generate': 
+        # We can make a single call to CudnnLSTM since all layers are the same
+        # size and we aren't using residual connections.
+        cudnn_initial_state = state_tuples_to_cudnn_lstm_state(initial_state)
+        cell = tf.contrib.cudnn_rnn.CudnnLSTM(
+            num_layers=len(layers),
+            num_units=layers[0],
+            direction='unidirectional',
+            dropout=1.0 - dropout)
+        outputs, final_state = cell(
+          cudnn_inputs, initial_state=cudnn_initial_state,
+          training=mode == 'train')
+        final_state = cudnn_lstm_state_to_state_tuples(final_state)
+    else:
+        cell = tf.contrib.rnn.MultiRNNCell(
+            [tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(num_units)
+              for num_units in layers])
+
+        outputs, final_state = tf.nn.dynamic_rnn(
+            cell, cudnn_inputs, initial_state=initial_state, time_major=True,
+            scope='cudnn_lstm/rnn')
+
+    outputs = tf.transpose(outputs, [1, 0, 2])
+
+    return outputs, tuple(initial_state), tuple(final_state)
+
+    
+
+def get_deep_lstm(layers, dropout):
   cells = [tf.nn.rnn_cell.LSTMCell(size, reuse=tf.AUTO_REUSE) for size in layers]
-  cells = [tf.contrib.rnn.DropoutWrapper(cell, prob) for prob, cell in zip(dropouts, cells)]
+  cells = [tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=dropout) for cell in cells]
   return tf.contrib.rnn.MultiRNNCell(cells)
 
 
