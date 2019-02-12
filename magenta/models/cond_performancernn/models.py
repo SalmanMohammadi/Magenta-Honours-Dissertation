@@ -8,10 +8,10 @@ from magenta.models.performance_rnn.performance_model import PerformanceRnnConfi
 
 class BaseModel:
 
-    def __init__(self, config, mode, examples_path):
+    def __init__(self, config, mode, examples_path=None):
         self.build_graph_fn = self.get_build_graph_fn(config, mode, examples_path)
 
-    def get_build_graph_fn(self, config, mode, examples_path):
+    def get_build_graph_fn(self, config, mode, examples_path=None):
         pass
 
     def train(self, logdir='log/', save_checkpoint_secs=60, save_summaries_steps=10, steps=1000, log_steps=10):
@@ -78,7 +78,7 @@ class BaseModel:
 
 class LSTMModel(BaseModel):
 
-    def get_build_graph_fn(self, config, mode, examples_path):
+    def get_build_graph_fn(self, config, mode, examples_path=None):
 
         def build_graph():
 
@@ -143,7 +143,7 @@ class LSTMModel(BaseModel):
                 composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
 
                 lstm_loss = tf.reduce_mean(softmax_cross_entropy)
-                
+
                 tf.add_to_collection('composer_loss', composer_loss)
                 tf.add_to_collection('lstm_loss', lstm_loss)
                 tf.summary.scalar('composer_loss', composer_loss)
