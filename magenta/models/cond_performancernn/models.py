@@ -166,7 +166,7 @@ class LSTMModel(BaseModel):
               else:
                 loss = tf.reduce_mean(softmax_cross_entropy)
                 tf.add_to_collection('loss', loss)
-                tf.summary.scalar('loss')
+                tf.summary.scalar('loss', loss)
 
               optimizer = config.optimizer(learning_rate=learning_rate)
               train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer, global_step=global_step)
