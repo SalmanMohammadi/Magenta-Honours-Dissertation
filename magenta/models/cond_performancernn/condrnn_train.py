@@ -50,6 +50,9 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_string(
   'model', 'LSTM',
   'Model: LSTMAE, LSTM')
+tf.app.flags.DEFINE_boolean(
+  'constrained', False,
+  'Whether to use a smaller constrained dataset')
 tf.app.flags.DEFINE_string('run_dir', '/tmp/performance_rnn/logdir/run1',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
@@ -110,7 +113,9 @@ def main(unused_argv):
   mode = 'eval' if FLAGS.eval else 'train'
   
   composers, units = None, None
-  if FLAGS.csv:
+  if FLAGS.constrained:
+    composers, units = models.get_composers_constrained()
+  else if FLAGS.csv:
     csv = os.path.expanduser(FLAGS.csv)
     tf.logging.info("CSV file provided, populating metadata")
     composers, units = models.get_composers(csv)

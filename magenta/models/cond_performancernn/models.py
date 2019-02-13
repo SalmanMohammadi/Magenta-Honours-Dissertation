@@ -396,6 +396,9 @@ def get_composers(csv):
     composers = np.sort(np.array(df.groupby('canonical_composer').count().index.values, dtype=np.str))
     return composers, len(composers)
 
+def get_composers_constrained():
+    return ['Frédéric Chopin','Johann Sebastian Bach', 'Claude Debussy', 'Ludwig van Beethoven'], 4
+
 def get_config_with_csv(composer_dict):
     return PerformanceRnnConfig(
         mg.protobuf.generator_pb2.GeneratorDetails(

@@ -24,7 +24,7 @@ def main(unused_argv):
     composers = ['Frédéric Chopin',
         'Johann Sebastian Bach', 
         'Claude Debussy', 
-        'Ludwig van Beethoven',
+        'Ludwig van Beethoven'
         ]
     
     num_files = FLAGS.files
