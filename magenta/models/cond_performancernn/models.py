@@ -27,9 +27,10 @@ class BaseModel:
               'global_step': global_step,
               'loss': loss
           }
-          if tf.get_collection('lstm_loss') and tf.get_collection('composer_loss'):
+          if tf.get_collection('lstm_loss'):
             logging_dict['lstm_loss'] = tf.get_collection('lstm_loss')[0]
             logging_dict['composer_loss'] = tf.get_collection('composer_loss')[0]
+            logging_dict['composer_weighting'] = tf.get_collection('composer_weighting')[0]
 
           hooks = [
               tf.train.NanTensorHook(loss),
@@ -157,6 +158,7 @@ class LSTMModel(BaseModel):
                 composer_loss = classifier_weight * composer_loss
                 lstm_loss = (1 - classifier_weight) * lstm_loss
 
+                tf.add_to_collection('classifier_weight', classifier_weight)
                 composer_loss = tf.maximum(tf.Variable(0.0), composer_loss)
                 
                 loss = tf.add(lstm_loss, composer_loss)
@@ -226,6 +228,9 @@ class LSTMAE(BaseModel):
             outputs_enc, final_state_enc = tf.nn.dynamic_rnn(
                 encoder_cell, inputs, sequence_length=lengths, initial_state=initial_state,
                 swap_memory=True)
+
+            #Perhaps use a dense layer here?
+            z = tf.contrib.layers.linear(outputs_enc[-1], config.z_size)
         
             decoder_cell = get_deep_lstm(config.rnn_layers, config.dropout)
             decoder_initial_state = final_state_enc[-1].h
@@ -326,12 +331,17 @@ class LSTMConfig(BaseConfig):
 
         super(LSTMConfig, self).__init__(optimizer, learning_rate)
 
+class LSTMAEConfig(LSTMConfig):
+    def __init__(self, z_size=256):
+        self.z_size = 256
+
+        super(LSTMAEConfig, self).__init__()
+
 def state_tuples_to_cudnn_lstm_state(lstm_state_tuples):
   """Convert LSTMStateTuples to CudnnLSTM format."""
   h = tf.stack([s.h for s in lstm_state_tuples])
   c = tf.stack([s.c for s in lstm_state_tuples])
   return (h, c)
-
 
 def cudnn_lstm_state_to_state_tuples(cudnn_lstm_state):
   """Convert CudnnLSTM format to LSTMStateTuples."""
@@ -374,13 +384,10 @@ def get_cudnn(inputs, layers, dropout, batch_size, mode):
 
     return outputs, tuple(initial_state), tuple(final_state)
 
-    
-
 def get_deep_lstm(layers, dropout):
   cells = [tf.nn.rnn_cell.LSTMCell(size, reuse=tf.AUTO_REUSE) for size in layers]
   cells = [tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=dropout) for cell in cells]
   return tf.contrib.rnn.MultiRNNCell(cells)
-
 
 def get_composers(csv):
     df = pd.read_csv(csv)
@@ -388,7 +395,6 @@ def get_composers(csv):
     composers = [composer.split(' ')[1] for composer in composers]
     composers = np.sort(np.array(df.groupby('canonical_composer').count().index.values, dtype=np.str))
     return composers, len(composers)
-
 
 def get_config_with_csv(composer_dict):
     return PerformanceRnnConfig(
