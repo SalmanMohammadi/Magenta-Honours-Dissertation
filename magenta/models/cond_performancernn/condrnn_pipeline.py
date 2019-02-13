@@ -113,7 +113,7 @@ class MetadataPipeline(pipeline.Pipeline):
     self.data = data
 
   def transform(self, note_sequence):
-    composer = self.data.loc[self.data.midi_filename.contains(note_sequence.filename)].canonical_composer.values[0]
+    composer = self.data.loc[self.data.midi_filename.str.contains(note_sequence.filename)].canonical_composer.values[0]
     note_sequence.sequence_metadata.artist = composer
     return [note_sequence]
 
