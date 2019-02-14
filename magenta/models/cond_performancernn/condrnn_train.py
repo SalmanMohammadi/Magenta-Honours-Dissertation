@@ -115,7 +115,7 @@ def main(unused_argv):
   composers, units = None, None
   if FLAGS.constrained:
     composers, units = models.get_composers_constrained()
-  else if FLAGS.csv:
+  elif FLAGS.csv:
     csv = os.path.expanduser(FLAGS.csv)
     tf.logging.info("CSV file provided, populating metadata")
     composers, units = models.get_composers(csv)
