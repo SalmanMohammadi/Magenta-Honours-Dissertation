@@ -157,7 +157,7 @@ class LSTMModel(BaseModel):
                 composer_loss = classifier_weight * composer_loss
                 lstm_loss = (1 - classifier_weight) * lstm_loss
 
-                tf.add_to_collection('classifier_weight', classifier_weight)
+                tf.add_to_collection('composer_weighting', classifier_weight)
                 composer_loss = tf.maximum(tf.Variable(0.0), composer_loss)
                 
                 loss = tf.add(lstm_loss, composer_loss)
