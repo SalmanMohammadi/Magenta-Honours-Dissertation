@@ -27,10 +27,9 @@ class BaseModel:
               'global_step': global_step,
               'loss': loss
           }
-          if tf.get_collection('lstm_loss'):
-            logging_dict['lstm_loss'] = tf.get_collection('lstm_loss')[0]
-            logging_dict['composer_loss'] = tf.get_collection('composer_loss')[0]
-            logging_dict['composer_weighting'] = tf.get_collection('composer_weighting')[0]
+          for key in ['lstm_loss', 'composer_loss', 'composer_weighting']:
+            if tf.get_collection(key):
+                logging_dict[key] = tf.get_collection(key)[0]
 
           hooks = [
               tf.train.NanTensorHook(loss),
