@@ -398,14 +398,14 @@ def get_composers(csv):
 def get_composers_constrained():
     return ['Frédéric Chopin','Johann Sebastian Bach', 'Claude Debussy', 'Ludwig van Beethoven'], 4
 
-def get_config_with_csv(composer_dict):
+def get_config_with_csv(composers):
     return PerformanceRnnConfig(
         mg.protobuf.generator_pb2.GeneratorDetails(
             id='performance_with_dynamics',
             description='Conditional Performance RNN with dynamics'),
         mg.music.OneHotEventSequenceMetaDataEncoderDecoder(
             mg.music.PerformanceOneHotEncoding(
-                num_velocity_bins=32), composer_dict),
+                num_velocity_bins=32), composers),
         tf.contrib.training.HParams(
             batch_size=64,
             rnn_layer_sizes=[512, 512, 512],

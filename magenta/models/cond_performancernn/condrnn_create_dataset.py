@@ -34,6 +34,9 @@ FLAGS = tf.app.flags.FLAGS
 flags.DEFINE_string(
   'csv', None,
   'CSV containing metadata.')
+tf.app.flags.DEFINE_boolean(
+  'constrained', False,
+  'Whether to use a smaller constrained dataset')
 flags.DEFINE_string(
     'input', None,
     'TFRecord to read NoteSequence protos from.')
@@ -52,15 +55,21 @@ flags.DEFINE_string(
     'or FATAL.')
 
 
+
 def main(unused_argv):
   tf.logging.set_verbosity(FLAGS.log)
 
   data = None
+  composers = None
   if FLAGS.csv:
     csv = os.path.expanduser(FLAGS.csv)
     tf.logging.info("CSV file provided, populating metadata")
-    composers, units = models.get_composers(csv)
     data = pd.read_csv(csv)
+    if FLAGS.constrained:
+      composers, _ = models.get_composers_constrained()
+    else:
+      composers, _ = models.get_composers(csv)
+    
  
   pipeline_instance = condrnn_pipeline.get_pipeline(
       min_events=32,
