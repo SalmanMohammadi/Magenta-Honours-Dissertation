@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from tensorflow.python.util import nest as tf_nest
 from tensorflow.contrib.cudnn_rnn.python.layers import cudnn_rnn
 import tensorflow as tf
