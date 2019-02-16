@@ -53,6 +53,9 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_boolean(
   'constrained', False,
   'Whether to use a smaller constrained dataset')
+tf.app.flags.DEFINE_integer(
+  'layers', 2,
+  'Number of layers to use')
 tf.app.flags.DEFINE_string('run_dir', '/tmp/performance_rnn/logdir/run1',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
@@ -131,7 +134,9 @@ def main(unused_argv):
   optimizers = {'AdamOptimizer': tf.train.AdamOptimizer,
                 'RMSPropOptimizer': tf.train.RMSPropOptimizer}
   optimizer = optimizers[FLAGS.optimizer]
+  layers = FLAGS.layers
   config = LSTMConfig(
+    layers=layers,
     encoder_decoder=encoder_decoder,
     label_classifier_units=units,
     label_classifier_weight=label_classifier_weight,

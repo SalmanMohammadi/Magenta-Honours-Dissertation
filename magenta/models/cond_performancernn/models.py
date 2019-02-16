@@ -321,7 +321,11 @@ class BaseConfig():
 class LSTMConfig(BaseConfig):
     def __init__(self, encoder_decoder, optimizer=tf.train.AdamOptimizer, learning_rate=0.01,
         rnn_layers=[512, 512], dropout=0.7, label_classifier_weight=None, 
-        label_classifier_units=None, label_classifier_dict=None, decay_steps=2000, gpu=False):
+        label_classifier_units=None, label_classifier_dict=None, decay_steps=2000, gpu=False, layers=None):
+        if layers:
+            self.rnn_layers = [512 for x in range(layers)]
+        else:
+            self.rnn_layers = rnn_layers
         self.encoder_decoder = encoder_decoder
         self.rnn_layers = rnn_layers
         self.dropout = dropout
