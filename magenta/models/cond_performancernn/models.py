@@ -179,7 +179,7 @@ class LSTMModel(BaseModel):
                 tf.summary.scalar('loss', loss)
 
               optimizer = config.optimizer(learning_rate=learning_rate)
-              train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer, global_step=global_step)
+              train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer, global_step=global_step, clip_gradient_norm=3)
 
               tf.add_to_collection('global_step', global_step)
               tf.add_to_collection('train_op', train_op)

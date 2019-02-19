@@ -66,8 +66,10 @@ def main(unused_argv):
     tf.logging.info("CSV file provided, populating metadata")
     data = pd.read_csv(csv)
     if FLAGS.constrained:
+      tf.logging.info("Constrained")
       composers, _ = models.get_composers_constrained()
     else:
+      tf.logging.info("Unconstrained")
       composers, _ = models.get_composers(csv)
     
  
