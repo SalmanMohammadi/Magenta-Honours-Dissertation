@@ -59,6 +59,9 @@ tf.app.flags.DEFINE_integer(
 tf.app.flags.DEFINE_integer(
   'batch_size', 64,
   'Batch size')
+tf.app.flags.DEFINE_integer(
+  'threads', 4,
+  'Input threads')
 tf.app.flags.DEFINE_string('run_dir', '/tmp/performance_rnn/logdir/run1',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '

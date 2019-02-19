@@ -98,11 +98,18 @@ class LSTMModel(BaseModel):
                     inputs, labels, lengths, composers = mg.common.get_padded_batch_metadata(
                         examples_path, batch_size, input_size,
                         label_shape=label_shape, shuffle=mode == 'train', 
-                        composer_shape=config.label_classifier_units)
+                        composer_shape=config.label_classifier_units, config.threads)
+                    assert not tf.debugging.is_nan(inputs)
+                    assert not tf.debugging.is_nan(labels)
+                    assert not tf.debugging.is_nan(lengths)
+                    assert not tf.debugging.is_nan(composers)
                 else:
                     inputs, labels, lengths = mg.common.get_padded_batch(
                             examples_path, batch_size, input_size,
                             label_shape=label_shape, shuffle=mode == 'train')
+                    assert not tf.debugging.is_nan(inputs)
+                    assert not tf.debugging.is_nan(labels)
+                    assert not tf.debugging.is_nan(lengths)
             else:
               inputs = tf.placeholder(tf.float32, [batch_size, None,
                                                    input_size])
@@ -328,7 +335,7 @@ class BaseConfig():
 class LSTMConfig(BaseConfig):
     def __init__(self, encoder_decoder, optimizer=tf.train.AdamOptimizer, learning_rate=0.01,
         rnn_layers=[512, 512], dropout=0.7, label_classifier_weight=None, 
-        label_classifier_units=None, label_classifier_dict=None, decay_steps=2000, gpu=False, layers=None, batch_size=None):
+        label_classifier_units=None, label_classifier_dict=None, decay_steps=2000, gpu=False, layers=None, batch_size=None, threads=None):
         if layers:
             self.rnn_layers = [512 for x in range(layers)]
         else:
@@ -341,6 +348,8 @@ class LSTMConfig(BaseConfig):
         self.decay_steps = decay_steps
         self.gpu = gpu
         self.batch_size=batch_size
+        self.threads = threads
+
         super(LSTMConfig, self).__init__(optimizer, learning_rate)
 
 class LSTMAEConfig(LSTMConfig):

@@ -130,8 +130,7 @@ def get_padded_batch_metadata(file_list, batch_size, input_size, label_shape=Non
 
   context, sequence = tf.parse_single_sequence_example(
       serialized_example, sequence_features=sequence_features, context_features=context_features)
-
-  print(context['composer'])
+  
   length = tf.shape(sequence['inputs'])[0]
   input_tensors = [sequence['inputs'], sequence['labels'], length, context['composer']]
   if shuffle:
