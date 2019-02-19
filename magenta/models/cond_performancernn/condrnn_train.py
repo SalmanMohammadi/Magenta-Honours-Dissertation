@@ -56,6 +56,9 @@ tf.app.flags.DEFINE_boolean(
 tf.app.flags.DEFINE_integer(
   'layers', 2,
   'Number of layers to use')
+tf.app.flags.DEFINE_integer(
+  'batch_size', 64,
+  'Batch size')
 tf.app.flags.DEFINE_string('run_dir', '/tmp/performance_rnn/logdir/run1',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
@@ -135,6 +138,7 @@ def main(unused_argv):
                 'RMSPropOptimizer': tf.train.RMSPropOptimizer}
   optimizer = optimizers[FLAGS.optimizer]
   layers = FLAGS.layers
+  batch_size = FLAGS.batch_size
   config = LSTMConfig(
     layers=layers,
     encoder_decoder=encoder_decoder,
@@ -142,7 +146,8 @@ def main(unused_argv):
     label_classifier_weight=label_classifier_weight,
     decay_steps=decay_steps,
     gpu=FLAGS.gpu,
-    optimizer=optimizer)
+    optimizer=optimizer,
+    batch_size=batch_size)
 
   model_configs = {'LSTM': LSTMModel, 'LSTMAE': LSTMAE}
   model = model_configs[FLAGS.model](config, mode, sequence_example_file_paths)
