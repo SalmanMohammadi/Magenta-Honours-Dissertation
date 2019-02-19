@@ -215,10 +215,17 @@ class LSTMAE(BaseModel):
                         examples_path, batch_size, input_size,
                         label_shape=label_shape, shuffle=mode == 'train', 
                         composer_shape=config.label_classifier_units)
+                    assert not tf.debugging.is_nan(inputs)
+                    assert not tf.debugging.is_nan(labels)
+                    assert not tf.debugging.is_nan(lengths)
+                    assert not tf.debugging.is_nan(composers)
                 else:
                     inputs, labels, lengths = mg.common.get_padded_batch(
                             examples_path, batch_size, input_size,
                             label_shape=label_shape, shuffle=mode == 'train')
+                    assert not tf.debugging.is_nan(inputs)
+                    assert not tf.debugging.is_nan(labels)
+                    assert not tf.debugging.is_nan(lengths)
             else:
               inputs = tf.placeholder(tf.float32, [batch_size, None,
                                                    input_size])
