@@ -142,6 +142,7 @@ def main(unused_argv):
   optimizer = optimizers[FLAGS.optimizer]
   layers = FLAGS.layers
   batch_size = FLAGS.batch_size
+  threads = FLAGS.threads
   config = LSTMConfig(
     layers=layers,
     encoder_decoder=encoder_decoder,
