@@ -89,7 +89,7 @@ class LSTMModel(BaseModel):
             num_classes = encoder_decoder.num_classes
             default_event_label = encoder_decoder.default_event_label
 
-            batch_size = 64
+            batch_size = config.batch_size
             label_shape = []
             learning_rate = config.learning_rate
             inputs, labels, lengths, composers = None, None, None, None

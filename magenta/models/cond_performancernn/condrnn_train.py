@@ -123,6 +123,7 @@ def main(unused_argv):
   
   composers, units = None, None
   if FLAGS.constrained:
+    tf.logging.info("Using constrained composers")
     composers, units = models.get_composers_constrained()
   elif FLAGS.csv:
     csv = os.path.expanduser(FLAGS.csv)
