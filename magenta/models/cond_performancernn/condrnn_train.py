@@ -150,7 +150,8 @@ def main(unused_argv):
     decay_steps=decay_steps,
     gpu=FLAGS.gpu,
     optimizer=optimizer,
-    batch_size=batch_size)
+    batch_size=batch_size,
+    threads=threads)
 
   model_configs = {'LSTM': LSTMModel, 'LSTMAE': LSTMAE}
   model = model_configs[FLAGS.model](config, mode, sequence_example_file_paths)
