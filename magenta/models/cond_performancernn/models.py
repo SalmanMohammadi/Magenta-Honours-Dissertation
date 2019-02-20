@@ -421,7 +421,9 @@ def get_composers(csv):
     return composers, len(composers)
 
 def get_composers_constrained():
-    return ['Frédéric Chopin','Johann Sebastian Bach', 'Claude Debussy', 'Ludwig van Beethoven'], 4
+    composers = [u'Frédéric Chopin',u'Johann Sebastian Bach', u'Claude Debussy', u'Ludwig van Beethoven']
+    composers = [x.encode('utf-8') for x in composers]
+    return composers, 4
 
 def get_config_with_csv(composers):
     return PerformanceRnnConfig(
