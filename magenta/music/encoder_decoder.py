@@ -1041,10 +1041,7 @@ class OneHotEventSequenceMetaDataEncoderDecoder(OneHotEventSequenceEncoderDecode
 
   def composer_to_encoding(self, composer):
     composer = composer.decode('utf-8')
-    tf.logging.info("Composer: " + composer)
-    tf.logging.info("Check: ")
-    tf.logging.info([int(composer == x) for x in self.composers])
-    return [int(composer == x) for x in self.composers]
+    return [int(composer == x.decode('utf-8')) for x in self.composers]
 
   def encode(self, events, composer):
     """Returns a SequenceExample for the given event sequence.
