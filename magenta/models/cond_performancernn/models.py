@@ -117,6 +117,7 @@ class LSTMModel(BaseModel):
 
             outputs, initial_state, final_state = None, None, None
             if config.gpu:
+                tf.logging.info("Using CudNN")
                 outputs, initial_state, final_state = get_cudnn(
                     inputs, config.rnn_layers, config.dropout, batch_size, mode)
             else:
@@ -178,7 +179,7 @@ class LSTMModel(BaseModel):
                 tf.add_to_collection('loss', loss)
                 tf.summary.scalar('loss', loss)
 
-              optimizer = config.optimizer(learning_rate=learning_rate)
+              optimizer = config.optimizer(learning_rate=learning_rate, momentum=config.momentum)
               train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer, global_step=global_step, clip_gradient_norm=3)
 
               tf.add_to_collection('global_step', global_step)
@@ -333,9 +334,10 @@ class BaseConfig():
         self.learning_rate = learning_rate
 
 class LSTMConfig(BaseConfig):
-    def __init__(self, encoder_decoder, optimizer=tf.train.AdamOptimizer, learning_rate=0.01,
+    def __init__(self, encoder_decoder, optimizer=tf.train.RMSPropOptimizer, learning_rate=0.01,
         rnn_layers=[512, 512], dropout=0.7, label_classifier_weight=None, 
-        label_classifier_units=None, label_classifier_dict=None, decay_steps=2000, gpu=False, layers=None, batch_size=None, threads=None):
+        label_classifier_units=None, label_classifier_dict=None, decay_steps=2000, gpu=False, layers=None, batch_size=None, threads=None,
+        momentum=0.1):
         if layers:
             self.rnn_layers = [512 for x in range(layers)]
         else:
@@ -349,6 +351,7 @@ class LSTMConfig(BaseConfig):
         self.gpu = gpu
         self.batch_size=batch_size
         self.threads = threads
+        self.momentum = momentum
 
         super(LSTMConfig, self).__init__(optimizer, learning_rate)
 

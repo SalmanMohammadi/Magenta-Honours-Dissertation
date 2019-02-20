@@ -45,7 +45,7 @@ tf.app.flags.DEFINE_boolean(
   'gpu', False,
   'Whether to use CudNN')
 tf.app.flags.DEFINE_string(
-  'optimizer', 'AdamOptimizer',
+  'optimizer', 'RMSPropOptimizer',
   'Optimizer: RMSPropOptimizer, AdamOptimizer')
 tf.app.flags.DEFINE_string(
   'model', 'LSTM',
@@ -62,6 +62,9 @@ tf.app.flags.DEFINE_integer(
 tf.app.flags.DEFINE_integer(
   'threads', 4,
   'Input threads')
+tf.app.flags.DEFINE_integer(
+  'momentum', 0,
+  'Momentum')
 tf.app.flags.DEFINE_string('run_dir', '/tmp/performance_rnn/logdir/run1',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
@@ -144,6 +147,7 @@ def main(unused_argv):
   layers = FLAGS.layers
   batch_size = FLAGS.batch_size
   threads = FLAGS.threads
+  momentum = FLAGS.momentum
   config = LSTMConfig(
     layers=layers,
     encoder_decoder=encoder_decoder,
@@ -153,7 +157,8 @@ def main(unused_argv):
     gpu=FLAGS.gpu,
     optimizer=optimizer,
     batch_size=batch_size,
-    threads=threads)
+    threads=threads,
+    momentum=momentum)
 
   model_configs = {'LSTM': LSTMModel, 'LSTMAE': LSTMAE}
   model = model_configs[FLAGS.model](config, mode, sequence_example_file_paths)
