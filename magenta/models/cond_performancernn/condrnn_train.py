@@ -155,7 +155,7 @@ def main(unused_argv):
   threads = FLAGS.threads
   momentum = FLAGS.momentum
   learning_rate = FLAGS.learning_rate
-  norm = flags.norm
+  norm = FLAGS.norm
 
   config = LSTMConfig(
     layers=layers,
