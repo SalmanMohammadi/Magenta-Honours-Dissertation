@@ -138,6 +138,7 @@ class LSTMModel(BaseModel):
                       labels, lengths)
               softmax_cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
                     labels=labels_flat, logits=logits_flat)
+              softmax_cross_entropy = tf.debugging.check_numerics(softmax_cross_entropy, "softmax_cross_entropy invalid")
 
               loss = None
               global_step = tf.Variable(-1, trainable=False)
