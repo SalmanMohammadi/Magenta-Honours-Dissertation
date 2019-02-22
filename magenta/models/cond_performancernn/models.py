@@ -99,9 +99,9 @@ class LSTMModel(BaseModel):
                         label_shape=label_shape, shuffle=mode == 'train', 
                         composer_shape=config.label_classifier_units, num_enqueuing_threads=config.threads)
                     inputs = tf.debugging.check_numerics(inputs, "Inputs invalid")
-                    labels = tf.debugging.check_numerics(labels, "Labels invalid")
-                    lengths = tf.debugging.check_numerics(lengths, "Lengths invalid")
-                    composers = tf.debugging.check_numerics(composers, "Composers invalid")
+                    labels = tf.debugging.check_numerics(tf.cast(labels, tf.int64), "Labels invalid")
+                    lengths = tf.debugging.check_numerics(tf.cast(lengths, tf.int64), "Lengths invalid")
+                    composers = tf.debugging.check_numerics(tf.cast(composers, tf.int64), "Composers invalid")
                 else:
                     inputs, labels, lengths = mg.common.get_padded_batch(
                             examples_path, batch_size, input_size,
