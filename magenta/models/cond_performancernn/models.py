@@ -98,10 +98,10 @@ class LSTMModel(BaseModel):
                         examples_path, batch_size, input_size,
                         label_shape=label_shape, shuffle=mode == 'train', 
                         composer_shape=config.label_classifier_units, num_enqueuing_threads=config.threads)
-                    # assert not tf.debugging.is_nan(inputs)
-                    # assert not tf.debugging.is_nan(labels)
-                    # assert not tf.debugging.is_nan(lengths)
-                    # assert not tf.debugging.is_nan(composers)
+                    inputs = tf.debugging.check_numerics(inputs, "Inputs invalid")
+                    labels = tf.debugging.check_numerics(labels, "Labels invalid")
+                    lengths = tf.debugging.check_numerics(lengths, "Lengths invalid")
+                    composers = tf.debugging.check_numerics(composers, "Composers invalid")
                 else:
                     inputs, labels, lengths = mg.common.get_padded_batch(
                             examples_path, batch_size, input_size,
@@ -149,6 +149,8 @@ class LSTMModel(BaseModel):
                 composer_logits = tf.layers.dense(final_state[-1].h, config.label_classifier_units)
                 composer_softmax_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
                     labels=composers, logits=composer_logits)
+
+                composer_logits = tf.debugging.check_numerics(composer_logits, "composer_logits invalid")
                 composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
 
                 lstm_loss = tf.reduce_mean(softmax_cross_entropy)
@@ -157,7 +159,6 @@ class LSTMModel(BaseModel):
                 tf.add_to_collection('composer_loss', composer_loss)
                 tf.add_to_collection('lstm_loss', lstm_loss)
                 tf.summary.scalar('composer_loss', composer_loss)
-                tf.summary.scalar('lstm_loss', lstm_loss)
                 tf.summary.scalar('lstm_loss', lstm_loss)
 
                 decay_steps = config.decay_steps
@@ -172,10 +173,15 @@ class LSTMModel(BaseModel):
                 tf.summary.scalar('composer_weight', classifier_weight)
                 composer_loss = tf.maximum(tf.Variable(1e-07), composer_loss)
                 
+                composer_loss = tf.debugging.check_numerics(composer_loss, "composer_loss invalid")
+                lstm_loss = tf.debugging.check_numerics(lstm_loss, "lstm_loss invalid")
+
                 loss = tf.add(lstm_loss, composer_loss)
+                loss = tf.debugging.check_numerics(loss, "loss invalid")
 
                 tf.add_to_collection('loss', loss)
                 tf.summary.scalar('loss', loss)
+
               else:
                 loss = tf.reduce_mean(softmax_cross_entropy)
                 tf.add_to_collection('loss', loss)
