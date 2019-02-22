@@ -65,6 +65,12 @@ tf.app.flags.DEFINE_integer(
 tf.app.flags.DEFINE_integer(
   'momentum', 0,
   'Momentum')
+tf.app.flags.DEFINE_float(
+  'learning_rate', 0.1,
+  'Learning rate')
+tf.app.flags.DEFINE_integer(
+  'norm', 2,
+  'Clipping norm')
 tf.app.flags.DEFINE_string('run_dir', '/tmp/performance_rnn/logdir/run1',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
@@ -148,6 +154,9 @@ def main(unused_argv):
   batch_size = FLAGS.batch_size
   threads = FLAGS.threads
   momentum = FLAGS.momentum
+  learning_rate = FLAGS.learning_rate
+  norm = flags.norm
+
   config = LSTMConfig(
     layers=layers,
     encoder_decoder=encoder_decoder,
@@ -158,12 +167,14 @@ def main(unused_argv):
     optimizer=optimizer,
     batch_size=batch_size,
     threads=threads,
-    momentum=momentum)
+    momentum=momentum,
+    learning_rate=learning_rate,
+    norm=norm)
 
   model_configs = {'LSTM': LSTMModel, 'LSTMAE': LSTMAE}
   model = model_configs[FLAGS.model](config, mode, sequence_example_file_paths)
   # model = LSTMModel(config, mode, sequence_example_file_paths)
-  
+  tf.logging.info('GPU: ' + str(FLAGS.gpu))
   if FLAGS.eval:
     eval_dir = os.path.join(run_dir, 'eval')
     tf.gfile.MakeDirs(eval_dir)

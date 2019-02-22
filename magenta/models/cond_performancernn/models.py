@@ -21,9 +21,8 @@ class BaseModel:
           tf.logging.info('Building graph.')
           self.build_graph_fn()
 
-          global_step = tf.train.get_or_create_global_step()
+          global_step = tf.get_collection('global_step')[0]
           loss = tf.get_collection('loss')[0]
-          optimizer = tf.get_collection('optimizer')[0].minimize(loss)
           train_op = tf.get_collection('train_op')[0]
           logging_dict = {
               'global_step': global_step,
@@ -154,9 +153,11 @@ class LSTMModel(BaseModel):
 
                 lstm_loss = tf.reduce_mean(softmax_cross_entropy)
 
+                # tf.add_to_collection('composers', composers)
                 tf.add_to_collection('composer_loss', composer_loss)
                 tf.add_to_collection('lstm_loss', lstm_loss)
                 tf.summary.scalar('composer_loss', composer_loss)
+                tf.summary.scalar('lstm_loss', lstm_loss)
                 tf.summary.scalar('lstm_loss', lstm_loss)
 
                 decay_steps = config.decay_steps
@@ -168,7 +169,8 @@ class LSTMModel(BaseModel):
                 lstm_loss = (1 - classifier_weight) * lstm_loss
 
                 tf.add_to_collection('composer_weighting', classifier_weight)
-                composer_loss = tf.maximum(tf.Variable(0.0), composer_loss)
+                tf.summary.scalar('composer_weight', classifier_weight)
+                composer_loss = tf.maximum(tf.Variable(1e-07), composer_loss)
                 
                 loss = tf.add(lstm_loss, composer_loss)
 
@@ -180,7 +182,7 @@ class LSTMModel(BaseModel):
                 tf.summary.scalar('loss', loss)
 
               optimizer = config.optimizer(learning_rate=learning_rate, momentum=config.momentum)
-              train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer, global_step=global_step, clip_gradient_norm=3)
+              train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer, global_step=global_step, clip_gradient_norm=config.norm)
 
               tf.add_to_collection('global_step', global_step)
               tf.add_to_collection('train_op', train_op)
@@ -337,7 +339,7 @@ class LSTMConfig(BaseConfig):
     def __init__(self, encoder_decoder, optimizer=tf.train.RMSPropOptimizer, learning_rate=0.01,
         rnn_layers=[512, 512], dropout=0.7, label_classifier_weight=None, 
         label_classifier_units=None, label_classifier_dict=None, decay_steps=2000, gpu=False, layers=None, batch_size=None, threads=None,
-        momentum=0.1):
+        momentum=0.0, norm=2):
         if layers:
             self.rnn_layers = [512 for x in range(layers)]
         else:
@@ -352,6 +354,7 @@ class LSTMConfig(BaseConfig):
         self.batch_size=batch_size
         self.threads = threads
         self.momentum = momentum
+        self.norm = norm
 
         super(LSTMConfig, self).__init__(optimizer, learning_rate)
 

@@ -47,6 +47,12 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_boolean(
   'gpu',  False,
   'Whether to use CudNN')
+tf.app.flags.DEFINE_integer(
+  'layers', 2,
+  'Number of layers to use')
+tf.app.flags.DEFINE_integer(
+  'batch_size', 64,
+  'Batch size')
 tf.app.flags.DEFINE_string(
     'hparams', '',
     'Comma-separated list of `name=value` pairs. For each pair, the value of '
@@ -68,9 +74,15 @@ def main(unused_argv):
   data_config = models.default_configs['conditional_performance_with_dynamics']
   data_config.hparams.parse(FLAGS.hparams)
   encoder_decoder = data_config.encoder_decoder
+
+  layers = FLAGS.layers
+  batch_size = FLAGS.batch_size
+
   config = LSTMConfig(
     encoder_decoder=encoder_decoder,
-    gpu=FLAGS.gpu)
+    gpu=FLAGS.gpu,
+    layers=layers,
+    batch_size=batch_size)
 
   model = model_dict[FLAGS.model](config, 'generate')
   number = FLAGS.checkpoint_number
