@@ -15,7 +15,7 @@
 
 Uses flags to define operation.
 """
-
+import pickle
 import ast
 import os
 import time
@@ -31,6 +31,9 @@ from magenta.protobuf import generator_pb2
 from magenta.protobuf import music_pb2
 
 FLAGS = tf.app.flags.FLAGS
+tf.app.flags.DEFINE_string(
+    'state_file', None,
+    'Path to the statefile where the rnn states are stored.')
 tf.app.flags.DEFINE_string(
     'run_dir', None,
     'Path to the directory where the latest checkpoint will be loaded from.')
@@ -105,6 +108,9 @@ tf.app.flags.DEFINE_string(
     'Comma-separated list of `name=value` pairs. For each pair, the value of '
     'the hyperparameter named `name` is set to `value`. This mapping is merged '
     'with the default hyperparameters.')
+tf.app.flags.DEFINE_boolean(
+'return_states', False,
+'Whether to return the RNN states that generate the performance.')
 
 # Add flags for all performance control signals.
 for control_signal_cls in magenta.music.all_performance_control_signals:
@@ -242,7 +248,12 @@ def run_with_flags(generator):
   date_and_time = time.strftime('%Y-%m-%d_%H%M%S')
   digits = len(str(FLAGS.num_outputs))
   for i in range(FLAGS.num_outputs):
-    generated_sequence = generator.generate(primer_sequence, generator_options)
+    generated_sequence = None
+    if FLAGS.return_states:
+      generated_sequence, states = generator.generate(primer_sequence, generator_options)
+      with open(FLAGS.state_file, 'wb') as fp:
+        pickle.dump(states, fp)
+        tf.logging.info('Wrote state file to %s', FLAGS.state_file)
 
     midi_filename = '%s_%s.mid' % (date_and_time, str(i + 1).zfill(digits))
     midi_path = os.path.join(output_dir, midi_filename)
@@ -256,6 +267,10 @@ def main(unused_argv):
   """Saves bundle or runs generator based on flags."""
   tf.logging.set_verbosity(FLAGS.log)
 
+  if FLAGS.return_states and not FLAGS.state_file:
+    tf.logging.fatal('--state_file required if --run_states')
+    return
+
   bundle = get_bundle()
 
   config_id = bundle.generator_details.id if bundle else FLAGS.config
@@ -264,6 +279,7 @@ def main(unused_argv):
   # Having too large of a batch size will slow generation down unnecessarily.
   config.hparams.batch_size = min(
       config.hparams.batch_size, FLAGS.beam_size * FLAGS.branch_factor)
+  return_states = FLAGS.return_states
 
   generator = performance_sequence_generator.PerformanceRnnSequenceGenerator(
       model=performance_model.PerformanceRnnModel(config),
@@ -274,7 +290,8 @@ def main(unused_argv):
       optional_conditioning=config.optional_conditioning,
       checkpoint=get_checkpoint(),
       bundle=bundle,
-      note_performance=config.note_performance)
+      note_performance=config.note_performance,
+      return_states=return_states)
 
   if FLAGS.save_generator_bundle:
     bundle_filename = os.path.expanduser(FLAGS.bundle_file)

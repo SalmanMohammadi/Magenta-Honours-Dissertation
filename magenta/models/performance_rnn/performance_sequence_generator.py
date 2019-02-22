@@ -43,7 +43,7 @@ class PerformanceRnnSequenceGenerator(mm.BaseSequenceGenerator):
                control_signals=None, optional_conditioning=False,
                max_note_duration=MAX_NOTE_DURATION_SECONDS,
                fill_generate_section=True, checkpoint=None, bundle=None,
-               note_performance=False):
+               note_performance=False, return_states=False):
     """Creates a PerformanceRnnSequenceGenerator.
 
     Args:
@@ -77,6 +77,7 @@ class PerformanceRnnSequenceGenerator(mm.BaseSequenceGenerator):
     self.max_note_duration = max_note_duration
     self.fill_generate_section = fill_generate_section
     self._note_performance = note_performance
+    self.return_states = return_states
 
   def _generate(self, input_sequence, generator_options):
     if len(generator_options.input_sections) > 1:
@@ -186,7 +187,6 @@ class PerformanceRnnSequenceGenerator(mm.BaseSequenceGenerator):
           tf.logging.fatal(
               'Invalid disable_conditioning value: %s',
               args['disable_conditioning'])
-
     total_steps = performance.num_steps + (
         generate_end_step - generate_start_step)
 
@@ -227,9 +227,9 @@ class PerformanceRnnSequenceGenerator(mm.BaseSequenceGenerator):
       tf.logging.info(
           'Need to generate %d more steps for this sequence, will try asking '
           'for %d RNN steps' % (steps_to_gen, rnn_steps_to_gen))
-      performance = self._model.generate_performance(
+      
+      performance, states = self._model.generate_performance(
           len(performance) + rnn_steps_to_gen, performance, **args)
-
       if not self.fill_generate_section:
         # In the interest of speed just go through this loop once, which may not
         # entirely fill the generate section.
@@ -241,6 +241,10 @@ class PerformanceRnnSequenceGenerator(mm.BaseSequenceGenerator):
         max_note_duration=self.max_note_duration)
 
     assert (generated_sequence.total_time - generate_section.end_time) <= 1e-5
+
+    if self.return_states:
+      tf.logging.info("Returning states")
+      return generated_sequence, states
     return generated_sequence
 
 

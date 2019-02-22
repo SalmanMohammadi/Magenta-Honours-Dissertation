@@ -16,6 +16,7 @@
 Uses flags to define operation.
 """
 
+import pickle
 import ast
 import os
 import time
