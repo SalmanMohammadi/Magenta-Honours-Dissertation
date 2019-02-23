@@ -136,6 +136,8 @@ class LSTMModel(BaseModel):
             if mode == 'train' or mode == 'eval':
               labels_flat = mg.common.flatten_maybe_padded_sequences(
                       labels, lengths)
+              labels_flat = tf.debugging.check_numerics(labels_flat, "labels_flat invalid")
+              logits_flat = tf.debugging.check_numerics(logits_flat, "logits_flat invalid")
               softmax_cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
                     labels=labels_flat, logits=logits_flat)
               softmax_cross_entropy = tf.debugging.check_numerics(softmax_cross_entropy, "softmax_cross_entropy invalid")
