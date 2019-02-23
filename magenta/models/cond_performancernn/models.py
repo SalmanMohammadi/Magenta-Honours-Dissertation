@@ -126,8 +126,10 @@ class LSTMModel(BaseModel):
                     cell, inputs, sequence_length=lengths, initial_state=initial_state,
                     swap_memory=True)
 
+            outputs = tf.debugging.check_numerics(outputs, "outputs invalid")
             outputs_flat = mg.common.flatten_maybe_padded_sequences(
                     outputs, lengths)
+            outputs_flat = tf.debugging.check_numerics(outputs_flat, "outputs_flat invalid")
 
             num_logits = num_classes
             
