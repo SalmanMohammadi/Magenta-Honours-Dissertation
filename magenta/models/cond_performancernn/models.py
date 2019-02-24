@@ -2,6 +2,7 @@
 
 from tensorflow.python.util import nest as tf_nest
 from tensorflow.contrib.cudnn_rnn.python.layers import cudnn_rnn
+from tensorflow.python import debug as tf_debug
 import tensorflow as tf
 import magenta as mg
 import pandas as pd
@@ -44,7 +45,8 @@ class BaseModel:
                                     logdir=logdir,
                                     hooks=hooks,
                                     save_checkpoint_secs=save_checkpoint_secs,
-                                    save_summaries_steps=save_summaries_steps)
+                                    save_summaries_steps=save_summaries_steps,
+                                    session_wrapper=tf_debug.LocalCLIDebugWrapperSession)
           tf.logging.info('Training loop complete.')
 
     def evaluate(self):
