@@ -155,7 +155,7 @@ class LSTMModel(BaseModel):
                 composer_logits = tf.layers.dense(final_state[-1].h, config.label_classifier_units)
                 composer_softmax_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
                     labels=composers, logits=composer_logits)
-                tf.add_to_collection('composer_logits', composer_logits)
+                tf.add_to_collection('composer_logits', tf.nn.softmax(composer_logits))
                 # composer_softmax = tf.nn.softmax(composer_logits)
                 # composers = tf.cast(composers, tf.float32)
                 # composer_softmax_cross_entropy = -tf.reduce_sum(composers*tf.log(composer_softmax + 1e-8))
