@@ -174,17 +174,17 @@ class LSTMModel(BaseModel):
                 tf.summary.scalar('composer_loss', composer_loss)
                 tf.summary.scalar('lstm_loss', lstm_loss)
 
-                decay_steps = config.decay_steps
-                classifier_weight =  config.label_classifier_weight - tf.train.polynomial_decay(
-                                            config.label_classifier_weight, global_step,
-                                            decay_steps, 0.0,
-                                            power=0.2)
-                composer_loss = classifier_weight * composer_loss
-                lstm_loss = (1 - classifier_weight) * lstm_loss
+                # decay_steps = config.decay_steps
+                # classifier_weight =  config.label_classifier_weight - tf.train.polynomial_decay(
+                #                             config.label_classifier_weight, global_step,
+                #                             decay_steps, 0.0,
+                #                             power=0.2)
+                composer_loss = config.label_classifier_weight * composer_loss
+                lstm_loss = (1 - config.label_classifier_weight) * lstm_loss
 
-                tf.add_to_collection('composer_weighting', classifier_weight)
-                tf.summary.scalar('composer_weight', classifier_weight)
-                composer_loss = tf.maximum(tf.Variable(1e-07), composer_loss)
+                # tf.add_to_collection('composer_weighting', classifier_weight)
+                # tf.summary.scalar('composer_weight', classifier_weight)
+                # composer_loss = tf.maximum(tf.Variable(1e-07), composer_loss)
                 
                 composer_loss = tf.debugging.check_numerics(composer_loss, "composer_loss invalid")
                 lstm_loss = tf.debugging.check_numerics(lstm_loss, "lstm_loss invalid")
