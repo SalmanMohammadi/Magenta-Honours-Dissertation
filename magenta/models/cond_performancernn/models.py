@@ -155,35 +155,36 @@ class LSTMModel(BaseModel):
                 composer_logits = tf.layers.dense(final_state[-1].h, config.label_classifier_units)
                 composer_logits = tf.debugging.check_numerics(composer_logits, "composer_logits invalid")
 
-                # composers = tf.argmax(composers, 1)
+                composers = tf.argmax(composers, 1)
 
-                # composer_softmax_cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                    # labels=composers, logits=composer_logits)
+                composer_softmax_cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                    labels=composers, logits=composer_logits)
                 tf.add_to_collection('composer_logits', tf.nn.softmax(composer_logits))
-                composer_softmax = tf.nn.softmax(composer_logits)
-                composers = tf.cast(composers, tf.float32)
-                composer_softmax_cross_entropy = -tf.reduce_sum(composers*tf.log(composer_softmax + 1e-8))
+                # composer_softmax = tf.nn.softmax(composer_logits)
+                # composers = tf.cast(composers, tf.float32)
+                # composer_softmax_cross_entropy = -tf.reduce_sum(composers*tf.log(composer_softmax + 1e-8))
 
                 composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
 
                 lstm_loss = tf.reduce_mean(softmax_cross_entropy)
 
-                # tf.add_to_collection('composers', composers)
+                tf.add_to_collection('composers', composers)
                 tf.add_to_collection('composer_loss', composer_loss)
                 tf.add_to_collection('lstm_loss', lstm_loss)
                 tf.summary.scalar('composer_loss', composer_loss)
                 tf.summary.scalar('lstm_loss', lstm_loss)
 
-                # decay_steps = config.decay_steps
-                # classifier_weight =  config.label_classifier_weight - tf.train.polynomial_decay(
-                #                             config.label_classifier_weight, global_step,
-                #                             decay_steps, 0.0,
-                #                             power=0.2)
-                composer_loss = config.label_classifier_weight * composer_loss
-                lstm_loss = (1 - config.label_classifier_weight) * lstm_loss
+                decay_steps = config.decay_steps
+                classifier_weight = tf.Variable(config.label_classifier_weight, trainable=False)
+                classifier_weight =  classifier_weight - tf.train.polynomial_decay(
+                                            config.label_classifier_weight, global_step,
+                                            decay_steps, 0.0,
+                                            power=0.2)
+                composer_loss = classifier_weight * composer_loss
+                lstm_loss = (1 - classifier_weight) * lstm_loss
 
-                # tf.add_to_collection('composer_weighting', classifier_weight)
-                # tf.summary.scalar('composer_weight', classifier_weight)
+                tf.add_to_collection('composer_weighting', classifier_weight)
+                tf.summary.scalar('composer_weight', classifier_weight)
                 # composer_loss = tf.maximum(tf.Variable(1e-07), composer_loss)
                 
                 composer_loss = tf.debugging.check_numerics(composer_loss, "composer_loss invalid")
