@@ -153,17 +153,17 @@ class LSTMModel(BaseModel):
                 tf.logging.info('****Building classifier graph.')
 
                 composer_logits = tf.layers.dense(final_state[-1].h, config.label_classifier_units)
-                composers = tf.argmax(composers, 1)
-
-                composer_softmax_cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                    labels=composers, logits=composer_logits)
-                tf.add_to_collection('composer_logits', tf.nn.softmax(composer_logits))
-                # composer_softmax = tf.nn.softmax(composer_logits)
-                # composers = tf.cast(composers, tf.float32)
-                # composer_softmax_cross_entropy = -tf.reduce_sum(composers*tf.log(composer_softmax + 1e-8))
-
-
                 composer_logits = tf.debugging.check_numerics(composer_logits, "composer_logits invalid")
+
+                # composers = tf.argmax(composers, 1)
+
+                # composer_softmax_cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                    # labels=composers, logits=composer_logits)
+                tf.add_to_collection('composer_logits', tf.nn.softmax(composer_logits))
+                composer_softmax = tf.nn.softmax(composer_logits)
+                composers = tf.cast(composers, tf.float32)
+                composer_softmax_cross_entropy = -tf.reduce_sum(composers*tf.log(composer_softmax + 1e-8))
+
                 composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
 
                 lstm_loss = tf.reduce_mean(softmax_cross_entropy)
