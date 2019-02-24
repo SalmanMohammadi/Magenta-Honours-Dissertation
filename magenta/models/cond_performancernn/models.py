@@ -29,7 +29,7 @@ class BaseModel:
               'global_step': global_step,
               'loss': loss
           }
-          for key in ['lstm_loss', 'composer_loss', 'composer_weighting']:
+          for key in ['lstm_loss', 'composer_loss', 'composer_weighting', 'composer', 'composer_logits']:
             if tf.get_collection(key):
                 logging_dict[key] = tf.get_collection(key)[0]
 
@@ -155,6 +155,11 @@ class LSTMModel(BaseModel):
                 composer_logits = tf.layers.dense(final_state[-1].h, config.label_classifier_units)
                 composer_softmax_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
                     labels=composers, logits=composer_logits)
+                tf.add_to_collection('composer_logits', tf.reduce_min(composer_logits))
+                # composer_softmax = tf.nn.softmax(composer_logits)
+                # composers = tf.cast(composers, tf.float32)
+                # composer_softmax_cross_entropy = -tf.reduce_sum(composers*tf.log(composer_softmax + 1e-8))
+
 
                 composer_logits = tf.debugging.check_numerics(composer_logits, "composer_logits invalid")
                 composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
