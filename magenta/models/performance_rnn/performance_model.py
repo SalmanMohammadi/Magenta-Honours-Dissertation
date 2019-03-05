@@ -199,6 +199,19 @@ default_configs = {
             clip_norm=3,
             learning_rate=0.001)),
 
+    'performance_with_meta_128': PerformanceRnnConfig(
+        magenta.protobuf.generator_pb2.GeneratorDetails(
+            id='performance_with_dynamics',
+            description='Performance RNN with meta and batch 128'),
+        magenta.music.OneHotEventSequenceEncoderDecoder(
+            magenta.music.PerformanceOneHotEncoding()),
+        tf.contrib.training.HParams(
+            batch_size=128,
+            rnn_layer_sizes=[512, 512, 512],
+            dropout_keep_prob=1.0,
+            clip_norm=3,
+            learning_rate=0.001)),
+
     'performance_with_dynamics': PerformanceRnnConfig(
         magenta.protobuf.generator_pb2.GeneratorDetails(
             id='performance_with_dynamics',

@@ -14,6 +14,8 @@ tf.app.flags.DEFINE_string('csv', None,
         'CSV metadata file.')
 tf.app.flags.DEFINE_integer('files', None,
         'Number of files to include in the dataset.')
+tf.app.flags.DEFINE_bool('eval', False,
+        'Whether we want to create a dataset for evaluating on.')
 
 def main(unused_argv):
     tf.logging.set_verbosity(tf.logging.INFO)
@@ -31,6 +33,10 @@ def main(unused_argv):
     output_dir = os.path.expanduser(FLAGS.output_dir)
     input_dir = os.path.expanduser(FLAGS.input_dir)
 
+    if eval:
+        tf.logging.info("Creating a dataset for eval.")
+        num_files += 4
+
     csv = os.path.expanduser(FLAGS.csv)
     df = pd.read_csv(csv)
     df = df[df.canonical_composer.isin(composers)]
@@ -40,9 +46,10 @@ def main(unused_argv):
     for composer in composers:
         filenames += list(df[df.canonical_composer.str.contains(composer)].sort_values('year')[-files_per_composer:].midi_filename.values)
 
-    for filename in filenames:
+    filenames = filenames[-4:]
+    for filename, composer in zip(filenames, composers):
         output_filename = os.path.basename(filename)
-        tf.logging.info('Copying ' + output_filename)
+        # tf.logging.info('Copying ' + output_filename + " composer: " + composer)
         copyfile(input_dir+filename, output_dir + '/' + output_filename)
 
 def console_entry_point():

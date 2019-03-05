@@ -249,11 +249,12 @@ def run_with_flags(generator):
   digits = len(str(FLAGS.num_outputs))
   for i in range(FLAGS.num_outputs):
     generated_sequence = None
+    generated_sequence, states = generator.generate(primer_sequence, generator_options)
     if FLAGS.return_states:
-      generated_sequence, states = generator.generate(primer_sequence, generator_options)
-      with open(FLAGS.state_file, 'wb') as fp:
+      file = FLAGS.state_file + '_' +  str(i) + '.dump'
+      with open(file, 'wb') as fp:
         pickle.dump(states, fp)
-        tf.logging.info('Wrote state file to %s', FLAGS.state_file)
+        tf.logging.info('Wrote state file to %s', file)
 
     midi_filename = '%s_%s.mid' % (date_and_time, str(i + 1).zfill(digits))
     midi_path = os.path.join(output_dir, midi_filename)

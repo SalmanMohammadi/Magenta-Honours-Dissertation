@@ -66,7 +66,7 @@ tf.app.flags.DEFINE_integer(
   'momentum', 0,
   'Momentum')
 tf.app.flags.DEFINE_float(
-  'learning_rate', 0.1,
+  'learning_rate', 0.01,
   'Learning rate')
 tf.app.flags.DEFINE_integer(
   'norm', 2,

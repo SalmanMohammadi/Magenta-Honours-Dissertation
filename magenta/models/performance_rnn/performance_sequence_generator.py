@@ -242,10 +242,8 @@ class PerformanceRnnSequenceGenerator(mm.BaseSequenceGenerator):
 
     assert (generated_sequence.total_time - generate_section.end_time) <= 1e-5
 
-    if self.return_states:
-      tf.logging.info("Returning states")
-      return generated_sequence, states
-    return generated_sequence
+    return generated_sequence, states
+
 
 
 def _step_to_value(step, num_steps, values):
