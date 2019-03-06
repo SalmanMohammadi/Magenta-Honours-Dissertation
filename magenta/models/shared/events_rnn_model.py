@@ -214,6 +214,8 @@ class EventSequenceRnnModel(mm.BaseModel):
 
     # Add padding to fill the final batch.
     pad_amt = -len(event_sequences) % batch_size
+    print("batch_size", self._batch_size())
+    print("pad amt", pad_amt)
     padded_event_sequences = event_sequences + [
         copy.deepcopy(event_sequences[-1]) for _ in range(pad_amt)]
     padded_inputs = inputs + [inputs[-1]] * pad_amt

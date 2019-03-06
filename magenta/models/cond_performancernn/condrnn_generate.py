@@ -72,12 +72,12 @@ def main(unused_argv):
   model_dict = {'LSTM': LSTMModel, 'LSTMAE': LSTMAE}
   checkpoint_dir = FLAGS.checkpoint_dir
 
-  data_config = models.default_configs['conditional_performance_with_dynamics']
+  data_config = models.default_configs['performance_with_meta_128']
   data_config.hparams.parse(FLAGS.hparams)
   encoder_decoder = data_config.encoder_decoder
 
   layers = FLAGS.layers
-  batch_size = FLAGS.batch_size
+  batch_size = 1
 
   config = LSTMConfig(
     encoder_decoder=encoder_decoder,
@@ -94,7 +94,7 @@ def main(unused_argv):
   tf.logging.info(checkpoint_dir)
   with tf.Graph().as_default() as g:
     
-    model.build_graph_fn()
+    model.get_build_graph_fn()
     sess = tf.Session(graph=g)
     saver = tf.train.Saver()
     

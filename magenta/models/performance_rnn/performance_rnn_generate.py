@@ -111,6 +111,9 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_boolean(
 'return_states', False,
 'Whether to return the RNN states that generate the performance.')
+tf.app.flags.DEFINE_boolean(
+  'constrained', False,
+  'Whether to use a constrained model')
 
 # Add flags for all performance control signals.
 for control_signal_cls in magenta.music.all_performance_control_signals:
@@ -274,12 +277,21 @@ def main(unused_argv):
 
   bundle = get_bundle()
 
-  config_id = bundle.generator_details.id if bundle else FLAGS.config
+  config_id = None
+  if FLAGS.constrained:
+    tf.logging.info("Using custom model.")
+    config_id = 'performance_with_meta_128'
+  else:
+    config_id = bundle.generator_details.id if bundle else FLAGS.config
+    if config_id == '':
+      config_id = FLAGS.config
+
   config = performance_model.default_configs[config_id]
   config.hparams.parse(FLAGS.hparams)
   # Having too large of a batch size will slow generation down unnecessarily.
   config.hparams.batch_size = min(
       config.hparams.batch_size, FLAGS.beam_size * FLAGS.branch_factor)
+
   return_states = FLAGS.return_states
 
   generator = performance_sequence_generator.PerformanceRnnSequenceGenerator(
