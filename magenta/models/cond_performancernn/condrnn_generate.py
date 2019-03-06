@@ -94,7 +94,7 @@ def main(unused_argv):
   tf.logging.info(checkpoint_dir)
   with tf.Graph().as_default() as g:
     
-    model.get_build_graph_fn()
+    model.build_graph_fn()
     sess = tf.Session(graph=g)
     saver = tf.train.Saver()
     
