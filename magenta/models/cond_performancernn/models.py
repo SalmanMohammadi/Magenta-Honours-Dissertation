@@ -136,7 +136,7 @@ class LSTMModel(BaseModel):
             
             logits_flat = tf.contrib.layers.linear(outputs_flat, num_logits)
 
-            if mode == 'train' or mode == 'eval':
+            if mode in ('train', 'eval'):
               labels_flat = mg.common.flatten_maybe_padded_sequences(
                       labels, lengths)
               labels_flat = tf.cast(tf.debugging.check_numerics(tf.cast(labels_flat, tf.float32), "labels_flat invalid"), tf.int64)
@@ -144,6 +144,10 @@ class LSTMModel(BaseModel):
               softmax_cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
                     labels=labels_flat, logits=logits_flat)
               softmax_cross_entropy = tf.debugging.check_numerics(softmax_cross_entropy, "softmax_cross_entropy invalid")
+
+              predictions_flat = tf.argmax(logits_flat, axis=1)
+              correct_predictions = tf.to_float(
+                  tf.equal(labels_flat, predictions_flat))
 
               loss = None
               global_step = tf.Variable(-1, trainable=False)
@@ -200,6 +204,14 @@ class LSTMModel(BaseModel):
                 loss = tf.reduce_mean(softmax_cross_entropy)
                 tf.add_to_collection('loss', loss)
                 tf.summary.scalar('loss', loss)
+
+              perplexity = tf.exp(loss)
+              accuracy = tf.reduce_mean(correct_predictions)
+              tf.add_to_collection('perplexity', perplexity)
+              tf.add_to_collection('accuracy', accuracy)
+
+              tf.summary.scalar('perplexity', perplexity)
+              tf.summary.scalar('accuracy', accuracy)
 
               optimizer = config.optimizer(learning_rate=learning_rate, momentum=config.momentum)
               train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer, global_step=global_step, clip_gradient_norm=config.norm)
