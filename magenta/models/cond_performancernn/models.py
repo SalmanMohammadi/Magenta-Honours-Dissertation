@@ -94,7 +94,7 @@ class LSTMModel(BaseModel):
             learning_rate = config.learning_rate
             inputs, labels, lengths, composers = None, None, None, None
             if mode == 'train' or mode == 'eval':
-                if isinstance(encoder_decoder, mg.music.OneHotEventSequenceMetaDataEncoderDecoder):
+                if config.label_classifier_units:
                     inputs, labels, lengths, composers = mg.common.get_padded_batch_metadata(
                         examples_path, batch_size, input_size,
                         label_shape=label_shape, shuffle=mode == 'train', 
@@ -136,6 +136,10 @@ class LSTMModel(BaseModel):
             
             logits_flat = tf.contrib.layers.linear(outputs_flat, num_logits)
 
+            if config.label_classifier_weight:
+                composer_logits = tf.layers.dense(final_state[-1].h, config.label_classifier_units)
+                composer_predictions = tf.argmax(composer_logits, axis=1)
+
             if mode in ('train', 'eval'):
               labels_flat = mg.common.flatten_maybe_padded_sequences(
                       labels, lengths)
@@ -154,25 +158,13 @@ class LSTMModel(BaseModel):
               # Predict our composer to enforce structure on embeddings
               if config.label_classifier_weight:
 
-                tf.logging.info('****Building classifier graph.')
-
-                composer_logits = tf.layers.dense(final_state[-1].h, config.label_classifier_units)
-                composer_logits = tf.debugging.check_numerics(composer_logits, "composer_logits invalid")
-
-                composers = tf.argmax(composers, 1)
-
                 composer_softmax_cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
                     labels=composers, logits=composer_logits)
                 tf.add_to_collection('composer_logits', tf.nn.softmax(composer_logits))
-                # composer_softmax = tf.nn.softmax(composer_logits)
-                # composers = tf.cast(composers, tf.float32)
-                # composer_softmax_cross_entropy = -tf.reduce_sum(composers*tf.log(composer_softmax + 1e-8))
 
                 composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
-
                 lstm_loss = tf.reduce_mean(softmax_cross_entropy)
 
-                tf.add_to_collection('composers', composers)
                 tf.add_to_collection('composer_loss', composer_loss)
                 tf.add_to_collection('lstm_loss', lstm_loss)
                 tf.summary.scalar('composer_loss', composer_loss)
@@ -225,6 +217,9 @@ class LSTMModel(BaseModel):
                     tf.div(logits_flat, tf.fill([num_classes], temperature)))
               softmax = tf.reshape(
                     softmax_flat, [batch_size, -1, num_classes])
+
+              # if config.label_classifier_weight:
+
 
               tf.add_to_collection('inputs', inputs)
               tf.add_to_collection('temperature', temperature)
