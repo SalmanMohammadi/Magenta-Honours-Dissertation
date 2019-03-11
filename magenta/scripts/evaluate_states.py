@@ -27,8 +27,7 @@ def main(unused_args):
 
         for file in glob.glob(path+"/*.dump"):
             with open(file, "rb") as f:
-                state = [x.rnn_state for l in pickle.load(f) for x in l]
-                composers[composer].append(state)
+                composers[composer].append(pickle.load(f))
 
     all_vectors = []
     for composer in composers:

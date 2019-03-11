@@ -106,7 +106,8 @@ class LSTMModel(BaseModel):
                 else:
                     inputs, labels, lengths = mg.common.get_padded_batch(
                             examples_path, batch_size, input_size,
-                            label_shape=label_shape, shuffle=mode == 'train')
+                            label_shape=label_shape, shuffle=mode == 'train',
+                            num_enqueuing_threads=config.threads)
                     # assert not tf.debugging.is_nan(inputs)
                     # assert not tf.debugging.is_nan(labels)
                     # assert not tf.debugging.is_nan(lengths)

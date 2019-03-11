@@ -21,6 +21,7 @@ import os
 import time
 
 import tensorflow as tf
+import numpy as np
 import magenta
 
 from magenta.models.performance_rnn import performance_model
@@ -111,9 +112,6 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_boolean(
 'return_states', False,
 'Whether to return the RNN states that generate the performance.')
-tf.app.flags.DEFINE_boolean(
-  'constrained', False,
-  'Whether to use a constrained model')
 
 # Add flags for all performance control signals.
 for control_signal_cls in magenta.music.all_performance_control_signals:
@@ -254,6 +252,8 @@ def run_with_flags(generator):
     generated_sequence = None
     generated_sequence, states = generator.generate(primer_sequence, generator_options)
 
+    states = np.array([np.array(x.rnn_state) for l in states for x in l]).reshape((-1, 512)).mean(axis=0)
+    
     midi_filename = '%s_%s.mid' % (date_and_time, str(i + 1).zfill(digits))
     midi_path = os.path.join(output_dir, midi_filename)
     magenta.music.sequence_proto_to_midi_file(generated_sequence, midi_path)
@@ -278,14 +278,10 @@ def main(unused_argv):
 
   bundle = get_bundle()
 
-  config_id = None
-  if FLAGS.constrained:
-    tf.logging.info("Using custom model.")
-    config_id = 'performance_with_meta_128'
-  else:
-    config_id = bundle.generator_details.id if bundle else FLAGS.config
-    if config_id == '':
-      config_id = FLAGS.config
+
+  config_id = bundle.generator_details.id if bundle else FLAGS.config
+  if config_id == '':
+    config_id = FLAGS.config
 
   config = performance_model.default_configs[config_id]
   config.hparams.parse(FLAGS.hparams)

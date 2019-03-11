@@ -19,6 +19,10 @@ tf.app.flags.DEFINE_bool('eval', False,
         'Whether we want to create a dataset for evaluating on.')
 tf.app.flags.DEFINE_bool('validate', False,
         'Whether we want to create a dataset for validating on.')
+tf.app.flags.DEFINE_integer('file_slice', None,
+        'Number of samples to collect from each file')
+tf.app.flags.DEFINE_integer('length', 15,
+        'Length of each sample')
 
 
 def main(unused_argv):
@@ -32,6 +36,8 @@ def main(unused_argv):
         'Claude Debussy', 
         'Ludwig van Beethoven'
         ]
+
+    composers_paths = dict(zip(composers, ['chopin', 'bach', 'debussy', 'beethoven']))
     
     num_files = FLAGS.files
     split = 'train'
@@ -48,27 +54,45 @@ def main(unused_argv):
     csv = os.path.expanduser(FLAGS.csv)
     df = pd.read_csv(csv)
     df = df[df.split.str.contains(split)]
-    df = df[df.canonical_composer.isin(composers)]
+    df = df[df.canonical_composer.isin(composers)] 
 
     files_per_composer = int(num_files/len(composers))
     filenames = []
     composers_out = []
     for composer in composers:
-        filenames += list(df[df.canonical_composer.str.contains(composer)].sort_values('year')[-files_per_composer:].midi_filename.values)
-        composers_out += [composer for x in range(files_per_composer)] 
+        curnames = list(df[df.canonical_composer.str.contains(composer)].sort_values('year')[-files_per_composer:].midi_filename.values)
+        tf.logging.info(composer + ": " + str(len(curnames)))
+        filenames += curnames
+        composers_out += [composer for x in range(len(curnames))] 
+
+    file_slice = FLAGS.file_slice
+    total_files = len(composers_out)
+    if file_slice:
+        total_files *= file_slice
+
+    tf.logging.info("Total files: " + str(total_files))
 
     for filename, composer in zip(filenames, composers_out):
         output_filename = os.path.basename(filename)
+        cur_dir = output_dir
         if FLAGS.eval:
-            output_filename = composer + output_filename
+            composer_dir = composers_paths[composer] + '/'
+            if not os.path.exists(os.path.join(cur_dir, composer_dir)):
+                os.mkdir(os.path.join(cur_dir, composer_dir))
+            cur_dir = os.path.join(cur_dir, composer_dir)
             tf.logging.info('Copying ' + output_filename + " composer: " + composer)
         else:
             tf.logging.info('Copying ' + output_filename)
 
         sequence = mg.music.midi_file_to_sequence_proto(input_dir+filename)
         # copyfile(input_dir+filename, output_dir + '/' + output_filename)
-        sequence = mg.music.extract_subsequence(sequence, 0, 15)
-        mg.music.sequence_proto_to_midi_file(sequence, output_dir+'/'+output_filename)
+        if file_slice:
+            for i, subseq in enumerate(mg.music.split_note_sequence(sequence, FLAGs.length)[:file_slice]):
+                tf.logging.info("Copied slice " + str(i) + '_' + output_filename)
+                mg.music.sequence_proto_to_midi_file(subseq, cur_dir +'/'+ str(i) + '_' + output_filename)
+        else:
+            sequence = mg.music.extract_subsequence(sequence, 0, FLAGS.length)
+            mg.music.sequence_proto_to_midi_file(sequence, cur_dir+'/'+output_filename)
 
 
 def console_entry_point():
