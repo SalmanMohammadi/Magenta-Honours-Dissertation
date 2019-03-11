@@ -3,6 +3,7 @@
 import tensorflow as tf
 import pandas as pd
 from shutil import copyfile
+import magenta as mg
 import os
 
 FLAGS = tf.app.flags.FLAGS
@@ -63,7 +64,12 @@ def main(unused_argv):
             tf.logging.info('Copying ' + output_filename + " composer: " + composer)
         else:
             tf.logging.info('Copying ' + output_filename)
-        copyfile(input_dir+filename, output_dir + '/' + output_filename)
+
+        sequence = mg.music.midi_file_to_sequence_proto(input_dir+filename)
+        # copyfile(input_dir+filename, output_dir + '/' + output_filename)
+        sequence = mg.music.extract_subsequence(sequence, 0, 15)
+        mg.music.sequence_proto_to_midi_file(sequence, output_dir+'/'+output_filename)
+
 
 def console_entry_point():
     tf.app.run(main)

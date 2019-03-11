@@ -366,7 +366,7 @@ class EventSequenceRnnModel(mm.BaseModel):
         extend_control_events_callback if control_events is not None else None,
         modify_events_callback=modify_events_callback)
 
-    events, states, loglik = beam_search(
+    events, _, loglik, states = beam_search(
         initial_sequence=event_sequences[0],
         initial_state=initial_state,
         generate_step_fn=generate_step_fn,
@@ -377,7 +377,6 @@ class EventSequenceRnnModel(mm.BaseModel):
 
     tf.logging.info('Beam search yields sequence with log-likelihood: %f ',
                     loglik)
-
 
     return events, states
 

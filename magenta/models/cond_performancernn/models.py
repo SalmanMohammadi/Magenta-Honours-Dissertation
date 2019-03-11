@@ -29,7 +29,7 @@ class BaseModel:
               'global_step': global_step,
               'loss': loss
           }
-          for key in ['lstm_loss', 'composer_loss', 'composer_weighting']:
+          for key in ['lstm_loss', 'composer_loss', 'composer_weighting', 'loss']:
             if tf.get_collection(key):
                 logging_dict[key] = tf.get_collection(key)[0]
 

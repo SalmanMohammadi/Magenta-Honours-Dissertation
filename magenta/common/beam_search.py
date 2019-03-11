@@ -17,6 +17,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import tensorflow as tf
+
 import collections
 import copy
 import heapq
@@ -74,6 +76,7 @@ def _prune_branches(beam_entries, k):
   """Prune all but the `k` sequences with highest score from the beam."""
   indices = heapq.nlargest(k, range(len(beam_entries)),
                            key=lambda i: beam_entries[i].score)
+
   return [beam_entries[i] for i in indices]
 
 
@@ -128,7 +131,7 @@ def beam_search(initial_sequence, initial_state, generate_step_fn, num_steps,
   # Choose the number of steps for the first iteration such that subsequent
   # iterations can all take the same number of steps.
   first_iteration_num_steps = (num_steps - 1) % steps_per_iteration + 1
-
+  states = []
   beam_entries = _generate_branches(
       beam_entries, generate_step_fn, branch_factor, first_iteration_num_steps)
 
@@ -137,10 +140,12 @@ def beam_search(initial_sequence, initial_state, generate_step_fn, num_steps,
 
   for _ in range(num_iterations):
     beam_entries = _prune_branches(beam_entries, k=beam_size)
+    [states.append(beam_entry.state) for beam_entry in beam_entries]
     beam_entries = _generate_branches(
         beam_entries, generate_step_fn, branch_factor, steps_per_iteration)
 
   # Prune to the single best beam entry.
   beam_entry = _prune_branches(beam_entries, k=1)[0]
+  states.append(beam_entry.state)
 
-  return beam_entry.sequence, beam_entry.state, beam_entry.score
+  return beam_entry.sequence, beam_entry.state, beam_entry.score, states

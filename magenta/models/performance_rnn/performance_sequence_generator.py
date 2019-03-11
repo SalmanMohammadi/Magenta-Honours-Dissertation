@@ -216,6 +216,7 @@ class PerformanceRnnSequenceGenerator(mm.BaseSequenceGenerator):
       # Primer is empty; let's just start with silence.
       performance.set_length(min(performance.max_shift_steps, total_steps))
 
+    states = []
     while performance.num_steps < total_steps:
       # Assume the average specified (or default) note density and 4 RNN steps
       # per note. Can't know for sure until generation is finished because the
@@ -228,8 +229,9 @@ class PerformanceRnnSequenceGenerator(mm.BaseSequenceGenerator):
           'Need to generate %d more steps for this sequence, will try asking '
           'for %d RNN steps' % (steps_to_gen, rnn_steps_to_gen))
       
-      performance, states = self._model.generate_performance(
+      performance, cur_states = self._model.generate_performance(
           len(performance) + rnn_steps_to_gen, performance, **args)
+      states.append(cur_states)
       if not self.fill_generate_section:
         # In the interest of speed just go through this loop once, which may not
         # entirely fill the generate section.
