@@ -29,7 +29,7 @@ class BaseModel:
               'global_step': global_step,
               'loss': loss
           }
-          for key in ['lstm_loss', 'composer_loss', 'composer_weighting', 'loss']:
+          for key in ['lstm_loss', 'composer_loss', 'composer_weighting']:
             if tf.get_collection(key):
                 logging_dict[key] = tf.get_collection(key)[0]
 
@@ -193,6 +193,7 @@ class LSTMModel(BaseModel):
                 tf.summary.scalar('loss', loss)
 
               else:
+                tf.logging.info("Building normal graph.")
                 loss = tf.reduce_mean(softmax_cross_entropy)
                 tf.add_to_collection('loss', loss)
                 tf.summary.scalar('loss', loss)
