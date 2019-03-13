@@ -16,12 +16,6 @@ tf.app.flags.DEFINE_string('csv', None,
         'CSV metadata file.')
 tf.app.flags.DEFINE_integer('files', None,
         'Number of files to include in the dataset.')
-tf.app.flags.DEFINE_bool('eval', False,
-        'Whether we want to create a dataset for evaluating on.')
-tf.app.flags.DEFINE_bool('validate', False,
-        'Whether we want to create a dataset for validating on.')
-tf.app.flags.DEFINE_bool('test', False,
-        'Whether we want to create a dataset for testing on.')
 tf.app.flags.DEFINE_integer('file_slice', None,
         'Number of samples to collect from each file')
 tf.app.flags.DEFINE_integer('length', 15,
@@ -94,18 +88,16 @@ def main(unused_argv):
             tf.logging.info('Copying ' + output_filename)
 
         sequence = mg.music.midi_file_to_sequence_proto(input_dir+filename)
-        
+        # copyfile(input_dir+filename, output_dir + '/' + output_filename)
         if file_slice:
             subseqs = mg.music.split_note_sequence(sequence, FLAGS.length)
             for i in range(file_slice):
                 subseq = random.choice(subseqs)
                 tf.logging.info("Copied slice " + str(i) + '_' + output_filename)
                 mg.music.sequence_proto_to_midi_file(subseq, cur_dir +'/'+ str(i) + '_' + output_filename)
-        elif FLAGS.length:
+        else:
             sequence = mg.music.extract_subsequence(sequence, 0, FLAGS.length)
             mg.music.sequence_proto_to_midi_file(sequence, cur_dir+'/'+output_filename)
-        else:
-            copyfile(input_dir+filename, output_dir + '/' + output_filename)
 
 
 def console_entry_point():

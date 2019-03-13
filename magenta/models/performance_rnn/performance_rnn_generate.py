@@ -253,13 +253,13 @@ def run_with_flags(generator):
     generated_sequence, states = generator.generate(primer_sequence, generator_options)
 
     states = np.array([np.array(x.rnn_state) for l in states for x in l]).reshape((-1, 512)).mean(axis=0)
-    
+
     midi_filename = '%s_%s.mid' % (date_and_time, str(i + 1).zfill(digits))
     midi_path = os.path.join(output_dir, midi_filename)
     magenta.music.sequence_proto_to_midi_file(generated_sequence, midi_path)
 
     if FLAGS.return_states:
-      file = FLAGS.state_file + '_' +  str(i) + '.dump'
+      file = FLAGS.state_file + '_' +  str(i) + midi_filename + '.dump'
       with open(file, 'wb') as fp:
         pickle.dump(states, fp)
         tf.logging.info('Wrote state file to %s', file)
