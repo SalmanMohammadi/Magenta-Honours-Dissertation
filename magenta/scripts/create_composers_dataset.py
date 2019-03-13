@@ -24,7 +24,7 @@ tf.app.flags.DEFINE_bool('test', False,
         'Whether we want to create a dataset for testing on.')
 tf.app.flags.DEFINE_integer('file_slice', None,
         'Number of samples to collect from each file')
-tf.app.flags.DEFINE_integer('length', 15,
+tf.app.flags.DEFINE_integer('length', None,
         'Length of each sample')
 
 
