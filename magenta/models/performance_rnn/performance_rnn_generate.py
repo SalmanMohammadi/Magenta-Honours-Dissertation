@@ -112,6 +112,15 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_boolean(
 'return_states', False,
 'Whether to return the RNN states that generate the performance.')
+tf.app.flags.DEFINE_boolean(
+'eval', False,
+'Whether to return sequences for experimenting with.')
+tf.app.flags.DEFINE_integer(
+'sample', None,
+'sample n states')
+tf.app.flags.DEFINE_integer(
+'eval_split', 15,
+'split eval')
 
 # Add flags for all performance control signals.
 for control_signal_cls in magenta.music.all_performance_control_signals:
@@ -249,16 +258,25 @@ def run_with_flags(generator):
   date_and_time = time.strftime('%Y-%m-%d_%H%M%S')
   digits = len(str(FLAGS.num_outputs))
   for i in range(FLAGS.num_outputs):
-    generated_sequence = None
+    generated_sequence, states = None, None
     generated_sequence, states = generator.generate(primer_sequence, generator_options)
-
-    states = np.array([np.array(x.rnn_state) for l in states for x in l]).reshape((-1, 512)).mean(axis=0)
-
+    tf.logging.info(os.path.basename(primer_midi))
+    
     midi_filename = '%s_%s.mid' % (date_and_time, str(i + 1).zfill(digits))
     midi_path = os.path.join(output_dir, midi_filename)
+    if FLAGS.eval:
+      midi_filename = os.path.basename(primer_midi)
+      midi_path = os.path.join(output_dir, midi_filename)
+      generated_sequence = magenta.music.split_note_sequence(generated_sequence, FLAGS.eval_split)[1]
+
     magenta.music.sequence_proto_to_midi_file(generated_sequence, midi_path)
 
     if FLAGS.return_states:
+      states = np.array([np.array(x.rnn_state[-1]) for l in states for x in l])
+      if FLAGS.sample:
+        states = states[np.random.choice(states.shape[0], FLAGS.sample, replace=False), :]
+      else:
+        states = states.mean(axis=0)
       file = FLAGS.state_file + '_' +  str(i) + midi_filename + '.dump'
       with open(file, 'wb') as fp:
         pickle.dump(states, fp)

@@ -14,23 +14,19 @@ tf.app.flags.DEFINE_string('input_dir', None,
         'Root directory for midi files.')
 tf.app.flags.DEFINE_string('output_dir', None,
         'Output directory')
-tf.app.flags.DEFINE_string('cond_dir', None,
-        'CondRNN output directory')
-tf.app.flags.DEFINE_string('base_dir', None,
-        'Base output directory')
 tf.app.flags.DEFINE_string('csv', None,
         'CSV metadata file.')
 tf.app.flags.DEFINE_integer('length', 30,
         'Length of each sample')
 tf.app.flags.DEFINE_integer('participants', 6,
         'Num experiments')
-tf.app.flags.DEFINE_integer('tests', 4,
+tf.app.flags.DEFINE_integer('tests', 6,
         'Number of comparisons to make')
 
 def main(unused_argv):
     tf.logging.set_verbosity(tf.logging.INFO)
-    if None in [FLAGS.input_dir, FLAGS.output_dir, FLAGS.csv, FLAGS.base_dir, FLAGS.cond_dir]:
-        tf.logging.fatal('--input_dir --output_dir --csv --files --base_dir --cond_dir required.')
+    if None in [FLAGS.input_dir, FLAGS.output_dir, FLAGS.csv]:
+        tf.logging.fatal('--input_dir --output_dir --csv --files required.')
         return
 
     composers = ['Frédéric Chopin',
@@ -39,9 +35,6 @@ def main(unused_argv):
         'Ludwig van Beethoven'
         ]
     
-    os.mkdir(FLAGS.base_dir)
-    os.mkdir(FLAGS.cond_dir)
-
     split = ['test', 'validation']
     output_dir = os.path.expanduser(FLAGS.output_dir)
     input_dir = os.path.expanduser(FLAGS.input_dir)
@@ -50,44 +43,50 @@ def main(unused_argv):
     df = pd.read_csv(df_csv)
     df = df[df.split.isin(split)]
 
-    start_times = [x for x in range(5, 600, 50)]
-    df = df[df.canonical_composer.isin(composers)] 
-    filenames = df.midi_filename.values
-    
-    output_dict = {'A': FLAGS.output_dir, 'X': FLAGS.cond_dir, 'Y': FLAGS.base_dir}
-    orderings = np.tile(['AXY', 'AYX', 'YAX', 'YXA', 'XYA', 'XAY'], int(FLAGS.participants / 6))
+    start_times = [x for x in range(5, 600, 25)]
+    df = df[df.canonical_composer.isin(composers)]
+    print(df.groupby("canonical_composer").count())
+    orderings = np.tile(['XxY', 'xYX', 'YXx', 'YyX', 'yXY', 'XYy'], int(FLAGS.participants / 6))
     orderings = np.tile(orderings, (FLAGS.tests, 1))
     for x in orderings:
       random.shuffle(x)
-    print(orderings)
+
+    composer_abb = ['CD', 'CB', 'CJ', 'DB', 'DJ', 'BJ']
+    random.shuffle(composer_abb)
+    new_orderings = []
+    for i, comp in enumerate(composer_abb):
+        new_orderings.append(np.array([order.replace('X', comp[0]).replace('Y', comp[1]).replace('x', comp[0]).replace('y', comp[1])
+                                        for order in orderings[i]]))
+    new_orderings = np.array(new_orderings)
 
     with open(os.path.join(output_dir, "orderings.csv"),"w+") as f:
       csvWriter = csv.writer(f,delimiter=',')
       csvWriter.writerows(orderings)
+      csvWriter.writerows(new_orderings)
 
     output_filename = "participant"
+    composer_dict = {"C": 'Frédéric Chopin', "J":'Johann Sebastian Bach', "D":'Claude Debussy', "B":'Ludwig van Beethoven'}
     for i in range(FLAGS.participants):
-      num_performances = FLAGS.tests
-      cur_filenames = np.random.choice(filenames, size=num_performances)
-      for j, fname in enumerate(cur_filenames):
-        cname = "{}_{}_test_{}".format(output_filename, i, j)
-        start_time = random.choice(start_times)
-        sequence = mg.music.midi_file_to_sequence_proto(input_dir+fname)
+        composer_filenames = {}
+        for composer in composer_dict:
+            composer_filenames[composer] = list(np.random.choice(df[df.canonical_composer.str.contains(composer_dict[composer])].midi_filename.values, size=6))
+            random.shuffle(composer_filenames[composer])
 
-        while not start_time + 5 + (FLAGS.length*2) < sequence.total_time:
-          start_time = random.choice(start_times)
+        for j in range(FLAGS.tests):
+            cname = "{}_{}_test_{}".format(output_filename, i, j)
 
-        sequence = mg.music.extract_subsequence(sequence, start_time, start_time+(FLAGS.length*2))
-        subseqs = mg.music.split_note_sequence(sequence, FLAGS.length)
+            for x, val in enumerate(zip(new_orderings[j, i], orderings[j, i])):
+                composer, order = val[0], val[1]
+                fname = composer_filenames[composer].pop()
+                start_time = random.choice(start_times)                
+                sequence = mg.music.midi_file_to_sequence_proto(input_dir+fname)
+                while not start_time + 5 + (FLAGS.length) < sequence.total_time:
+                  start_time = random.choice(start_times)
 
-        primer, output = subseqs[0], subseqs[1]
-        file_dict = {'A': output, 'X': primer, 'Y': primer}
-        for x, order in enumerate(orderings[j, i]):
-          cur_dir = output_dict[order]
-          midi_filename = "{}_{}.midi".format(cname, order)
-          print("{}/{}".format(cur_dir, midi_filename))
-          sequence = file_dict[order]
-          mg.music.sequence_proto_to_midi_file(sequence, cur_dir+'/'+midi_filename)
+                sequence = mg.music.extract_subsequence(sequence, start_time, start_time+FLAGS.length)
+                midi_filename = "{}_{}.midi".format(cname, order)
+                print("{}/{}".format(output_dir, midi_filename))
+                mg.music.sequence_proto_to_midi_file(sequence, os.path.join(output_dir, midi_filename))
 
 
     # files_per_composer = int(num_files/len(composers))

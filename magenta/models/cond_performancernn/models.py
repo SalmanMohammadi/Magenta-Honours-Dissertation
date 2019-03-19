@@ -2,12 +2,15 @@
 
 from tensorflow.python.util import nest as tf_nest
 from tensorflow.contrib.cudnn_rnn.python.layers import cudnn_rnn
-
+import six
 import tensorflow as tf
 import magenta as mg
 import pandas as pd
 import numpy as np
+from tensorflow.python.training import evaluation
 from magenta.models.performance_rnn.performance_model import PerformanceRnnConfig
+from tensorflow.train import SecondOrStepTimer
+from tensorflow.python.training import session_run_hook
 
 class BaseModel:
 
@@ -48,12 +51,13 @@ class BaseModel:
                                     save_summaries_steps=save_summaries_steps)
           tf.logging.info('Training loop complete.')
 
-    def evaluate(self):
+    def evaluate(self, logdir, eval_dir, num_batches, timeout_secs=300):
         with tf.Graph().as_default():
-            self.get_build_graph_fn('eval')()
+            self.build_graph_fn()
 
             # global_step = tf.train.get_or_create_global_step()
             global_step = tf.get_collection('global_step')[0]
+            # global_step = evaluation._get_or_create_eval_step()
             loss = tf.get_collection('loss')[0]
             perplexity = tf.get_collection('metrics/perplexity')[0]
             accuracy = tf.get_collection('metrics/accuracy')[0]
@@ -65,18 +69,133 @@ class BaseModel:
                 'Perplexity': perplexity,
                 'Accuracy': accuracy
             }
+            for key in ['composer_loss', 'composer_weighting']:
+              if tf.get_collection(key):
+                  logging_dict[key] = tf.get_collection(key)[0]
+            tf.logging.info(num_batches)
+
             hooks = [
-                EvalLoggingTensorHook(logging_dict, every_n_iter=num_batches),
+                EvalLoggingTensorHook(logging_dict, every_n_iter=1),
                 tf.contrib.training.StopAfterNEvalsHook(num_batches),
                 tf.contrib.training.SummaryAtEndHook(eval_dir),
+                tf.train.SummarySaverHook(output_dir=eval_dir, save_steps=1,
+                  scaffold=tf.train.Scaffold(summary_op=tf.summary.merge_all()))
             ]
 
             tf.contrib.training.evaluate_repeatedly(
-                train_dir,
+                logdir,
                 eval_ops=eval_ops,
                 hooks=hooks,
                 eval_interval_secs=60,
                 timeout=timeout_secs)
+
+
+
+class EvalLoggingTensorHook(tf.train.LoggingTensorHook):
+  """A revised version of LoggingTensorHook to use during evaluation.
+
+  This version supports being reset and increments `_iter_count` before run
+  instead of after run.
+  """
+
+  def begin(self):
+    # Reset timer.
+    self._timer.update_last_triggered_step(0)
+    super(EvalLoggingTensorHook, self).begin()
+
+  def before_run(self, run_context):
+    self._iter_count += 1
+    return super(EvalLoggingTensorHook, self).before_run(run_context)
+
+  def after_run(self, run_context, run_values):
+    super(EvalLoggingTensorHook, self).after_run(run_context, run_values)
+    self._iter_count -= 1
+
+class SummaryAtAllHook(session_run_hook.SessionRunHook):
+  """A revised version of SummaryAtEndHook to use during evaluation.
+
+  This version supports being reset and increments `_iter_count` before run
+  instead of after run.
+  """
+  def __init__(self,
+               save_steps=None,
+               save_secs=None,
+               output_dir=None,
+               summary_writer=None,
+               scaffold=None,
+               summary_op=None):
+    """Initializes a `SummarySaverHook`.
+    Args:
+      save_steps: `int`, save summaries every N steps. Exactly one of
+          `save_secs` and `save_steps` should be set.
+      save_secs: `int`, save summaries every N seconds.
+      output_dir: `string`, the directory to save the summaries to. Only used
+          if no `summary_writer` is supplied.
+      summary_writer: `SummaryWriter`. If `None` and an `output_dir` was passed,
+          one will be created accordingly.
+      scaffold: `Scaffold` to get summary_op if it's not provided.
+      summary_op: `Tensor` of type `string` containing the serialized `Summary`
+          protocol buffer or a list of `Tensor`. They are most likely an output
+          by TF summary methods like `tf.summary.scalar` or
+          `tf.summary.merge_all`. It can be passed in as one tensor; if more
+          than one, they must be passed in as a list.
+    Raises:
+      ValueError: Exactly one of scaffold or summary_op should be set.
+    """
+    if ((scaffold is None and summary_op is None) or
+        (scaffold is not None and summary_op is not None)):
+      raise ValueError(
+          "Exactly one of scaffold or summary_op must be provided.")
+    self._summary_op = summary_op
+    self._summary_writer = summary_writer
+    self._output_dir = output_dir
+    self._scaffold = scaffold
+    self._timer = SecondOrStepTimer(every_secs=save_secs,
+every_steps=save_steps)
+
+    def begin(self):
+      if self._summary_writer is None and self._output_dir:
+        self._summary_writer = SummaryWriterCache.get(self._output_dir)
+      self._next_step = None
+      self._global_step_tensor = evaluation._get_or_create_eval_step() # pylint: disable=protected-access
+      if self._global_step_tensor is None:
+        raise RuntimeError(
+          "Global step should be created to use SummarySaverHook.")
+
+    def before_run(self, run_context):  # pylint: disable=unused-argument
+      self._request_summary = (
+          self._next_step is None or
+          self._timer.should_trigger_for_step(self._next_step))
+      requests = {"global_step": self._global_step_tensor}
+      if self._request_summary:
+        if self._get_summary_op() is not None:
+          requests["summary"] = self._get_summary_op()
+
+      return SessionRunArgs(requests)
+
+
+    def after_run(self, run_context, run_values):
+      _ = run_context
+      if not self._summary_writer:
+        return
+
+      stale_global_step = run_values.results["global_step"]
+      global_step = stale_global_step + 1
+      if self._next_step is None or self._request_summary:
+        global_step = run_context.session.run(self._global_step_tensor)
+
+      if self._next_step is None:
+        self._summary_writer.add_session_log(
+            SessionLog(status=SessionLog.START), global_step)
+
+      if self._request_summary:
+        self._timer.update_last_triggered_step(global_step)
+        if "summary" in run_values.results:
+          for summary in run_values.results["summary"]:
+            self._summary_writer.add_summary(summary, global_step)
+
+      tf.logging.info(self.next_step)
+      self._next_step = global_step + 1
 
 class LSTMModel(BaseModel):
 
@@ -140,6 +259,8 @@ class LSTMModel(BaseModel):
             if config.label_classifier_weight:
                 composer_logits = tf.layers.dense(final_state[-1].h, config.label_classifier_units)
                 composer_predictions = tf.argmax(composer_logits, axis=1)
+                composer_softmax_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
+                      labels=composers, logits=composer_logits)
 
             if mode in ('train', 'eval'):
               labels_flat = mg.common.flatten_maybe_padded_sequences(
@@ -155,64 +276,91 @@ class LSTMModel(BaseModel):
                   tf.equal(labels_flat, predictions_flat))
 
               loss = None
-              global_step = tf.Variable(-1, trainable=False)
+              
               # Predict our composer to enforce structure on embeddings
-              if config.label_classifier_weight:
+              if mode == 'train':
+                global_step = tf.Variable(-1, trainable=False)
+                if config.label_classifier_weight:
 
-                composer_softmax_cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                    labels=composers, logits=composer_logits)
-                tf.add_to_collection('composer_logits', tf.nn.softmax(composer_logits))
+                  tf.add_to_collection('composer_logits', tf.nn.softmax(composer_logits))
 
-                composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
-                lstm_loss = tf.reduce_mean(softmax_cross_entropy)
+                  composer_loss = tf.reduce_mean(composer_softmax_cross_entropy)
+                  lstm_loss = tf.reduce_mean(softmax_cross_entropy)
 
-                tf.add_to_collection('composer_loss', composer_loss)
-                tf.add_to_collection('lstm_loss', lstm_loss)
-                tf.summary.scalar('composer_loss', composer_loss)
-                tf.summary.scalar('lstm_loss', lstm_loss)
+                  tf.add_to_collection('composer_loss', composer_loss)
+                  tf.add_to_collection('lstm_loss', lstm_loss)
+                  tf.summary.scalar('composer_loss', composer_loss)
+                  tf.summary.scalar('lstm_loss', lstm_loss)
 
-                decay_steps = config.decay_steps
-                classifier_weight = tf.Variable(config.label_classifier_weight, trainable=False)
-                classifier_weight =  classifier_weight - tf.train.polynomial_decay(
-                                            config.label_classifier_weight, global_step,
-                                            decay_steps, 0.0,
-                                            power=0.2)
-                composer_loss = classifier_weight * composer_loss
-                lstm_loss = (1 - classifier_weight) * lstm_loss
+                  decay_steps = config.decay_steps
+                  classifier_weight = tf.Variable(config.label_classifier_weight, trainable=False)
+                  classifier_weight =  classifier_weight - tf.train.polynomial_decay(
+                                              config.label_classifier_weight, global_step,
+                                              decay_steps, 0.0,
+                                              power=0.2)
+                  composer_loss = classifier_weight * composer_loss
+                  lstm_loss = (1 - classifier_weight) * lstm_loss
 
-                tf.add_to_collection('composer_weighting', classifier_weight)
-                tf.summary.scalar('composer_weight', classifier_weight)
-                # composer_loss = tf.maximum(tf.Variable(1e-07), composer_loss)
-                
-                composer_loss = tf.debugging.check_numerics(composer_loss, "composer_loss invalid")
-                lstm_loss = tf.debugging.check_numerics(lstm_loss, "lstm_loss invalid")
+                  tf.add_to_collection('composer_weighting', classifier_weight)
+                  tf.summary.scalar('composer_weight', classifier_weight)
+                  # composer_loss = tf.maximum(tf.Variable(1e-07), composer_loss)
+                  
+                  composer_loss = tf.debugging.check_numerics(composer_loss, "composer_loss invalid")
+                  lstm_loss = tf.debugging.check_numerics(lstm_loss, "lstm_loss invalid")
 
-                loss = tf.add(lstm_loss, composer_loss)
-                loss = tf.debugging.check_numerics(loss, "loss invalid")
+                  loss = tf.add(lstm_loss, composer_loss)
+                  loss = tf.debugging.check_numerics(loss, "loss invalid")
 
-                tf.add_to_collection('loss', loss)
-                tf.summary.scalar('loss', loss)
+                  tf.add_to_collection('loss', loss)
+                  tf.summary.scalar('loss', loss)
 
-              else:
-                tf.logging.info("Building normal graph.")
-                loss = tf.reduce_mean(softmax_cross_entropy)
-                tf.add_to_collection('loss', loss)
-                tf.summary.scalar('loss', loss)
+                else:
+                  tf.logging.info("Building normal graph.")
+                  loss = tf.reduce_mean(softmax_cross_entropy)
+                  tf.add_to_collection('loss', loss)
+                  tf.summary.scalar('loss', loss)
 
-              perplexity = tf.exp(loss)
-              accuracy = tf.reduce_mean(correct_predictions)
-              tf.add_to_collection('perplexity', perplexity)
-              tf.add_to_collection('accuracy', accuracy)
+                perplexity = tf.exp(loss)
+                accuracy = tf.reduce_mean(correct_predictions)
+                tf.add_to_collection('perplexity', perplexity)
+                tf.add_to_collection('accuracy', accuracy)
 
-              tf.summary.scalar('perplexity', perplexity)
-              tf.summary.scalar('accuracy', accuracy)
+                tf.summary.scalar('perplexity', perplexity)
+                tf.summary.scalar('accuracy', accuracy)
 
-              optimizer = config.optimizer(learning_rate=learning_rate, momentum=config.momentum)
-              train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer, global_step=global_step, clip_gradient_norm=config.norm)
+                optimizer = config.optimizer(learning_rate=learning_rate, momentum=config.momentum)
+                train_op = tf.contrib.slim.learning.create_train_op(loss, optimizer, global_step=global_step, clip_gradient_norm=config.norm)
 
-              tf.add_to_collection('global_step', global_step)
-              tf.add_to_collection('train_op', train_op)
-              tf.add_to_collection('optimizer', optimizer)
+                tf.add_to_collection('global_step', global_step)
+                tf.add_to_collection('train_op', train_op)
+                tf.add_to_collection('optimizer', optimizer)
+              elif mode == 'eval':
+                global_step = evaluation._get_or_create_eval_step()
+                metric_map = {
+                'loss': tf.metrics.mean(softmax_cross_entropy),
+                'metrics/accuracy': tf.metrics.accuracy(
+                    labels_flat, predictions_flat),
+                'metrics/per_class_accuracy':
+                    tf.metrics.mean_per_class_accuracy(
+                        labels_flat, predictions_flat, num_classes)}
+                if config.label_classifier_weight:
+                  metric_map['composer_loss'] = tf.metrics.mean(composer_softmax_cross_entropy)
+                  metric_map['metrics/composer_accuracy'] = tf.metrics.accuracy(composers, composer_logits)
+                  metric_map['metrics/composer_per_class_accuracy'] = tf.metrics.mean_per_class_accuracy(
+                                                            composers, composer_logits, 
+                                                            config.label_classifier_units)
+      
+                vars_to_summarize, update_ops = tf.contrib.metrics.aggregate_metric_map(metric_map)
+                for updates_op in update_ops.values():
+                  tf.add_to_collection('eval_ops', updates_op)
+                vars_to_summarize['metrics/perplexity'] = tf.exp(vars_to_summarize['loss'])
+                if config.label_classifier_weight:
+                  vars_to_summarize['metrics/composer_perplexity'] = tf.exp(vars_to_summarize['composer_loss'])
+                for var_name, var_value in six.iteritems(vars_to_summarize):
+                  tf.summary.scalar(var_name, var_value)
+                  tf.add_to_collection(var_name, var_value)
+
+                tf.add_to_collection('global_step', global_step)
             elif mode == 'generate':
               temperature = tf.placeholder(tf.float32, [])
               softmax_flat = tf.nn.softmax(
@@ -357,7 +505,7 @@ class LSTMAE(BaseModel):
                 tf.add_to_collection('initial_state', state)
               for state in tf_nest.flatten(final_state):
                 tf.add_to_collection('final_state', state)
-        return build_graph
+        # return build_graph
 
 class BaseConfig():
     def __init__(self, optimizer, learning_rate):

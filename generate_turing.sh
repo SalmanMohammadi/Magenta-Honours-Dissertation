@@ -1,25 +1,29 @@
 #!/usr/bin/env bash
 
-#find $1 -type d -exec find -name *.midi -exec echo {} \;
+trap "exit" INT
 
-#1 - 
-
-for dir in ./data/test/*
+#$1 - directory of primers
+#$2 - directory of ouputs
+#$3 - bundle file 
+#find $1 -type d -exec find -name *.midi -exec echo {} \;)
+for file in $1*
 do
+	echo $file
+	python  magenta/models/performance_rnn/performance_rnn_generate.py --bundle_file=$3 --output_dir=$2 --config=performance_with_dynamics --num_outputs=1 --num_steps=2010 --primer_midi=$file --eval --eval_split=10
 	#dir=$("$dir"/*"")
-	curdir="$(basename $dir"/")"
-	mkdir $2$curdir
-	for file in $dir"/*"
-	do
-		for f in $file
-		do
-			#echo $f
-			python  magenta/models/performance_rnn/performance_rnn_generate.py --bundle_file=$3 --output_dir=$2$curdir"/" --config=performance_with_dynamics --num_outputs=1 --num_steps=1000 --primer_midi=$f --return_states --state_file=$2$curdir/dump --sample=10
-		done
+	#curdir="$(basename $dir"/")"
+	#mkdir $2$curdir
+	#for file in $dir
+	#do
+		#for f in $file
+		#do
+		#	echo $f
+			#python  magenta/models/performance_rnn/performance_rnn_generate.py --bundle_file=~/Downloads/bundle.mag --output_dir=$2$curdir"/" --config=performance_with_dynamics --num_outputs=1 --num_steps=1500 --primer_midi=$f --return_states --state_file=$2$curdir/dump
+		#done
 		##curdir="$(basename $dir"/")"
 		#echo $file
 		#python  magenta/models/performance_rnn/performance_rnn_generate.py --bundle_file=~/Downloads/bundle.mag --output_dir=$2$curdir"/" --config=performance_with_dynamics --num_outputs=1 --num_steps=3000 --primer_midi=$file --return_states--state_file=$2$curdir/dump
-	done
+	#done
 done
 
 #python  magenta/models/performance_rnn/performance_rnn_generate.py --bundle_file=~/Downloads/bundle.mag --output_dir=data/generations/debussy/ --config=performance_with_dynamics --num_outputs=$1 --num_steps=3000 --primer_midi=data/test/Claude\ DebussyMIDI-Unprocessed_R2_D2-12-13-15_mid--AUDIO-from_mp3_12_R2_2015_wav--3.midi --return_states --state_file=data/generations/debussy/dump

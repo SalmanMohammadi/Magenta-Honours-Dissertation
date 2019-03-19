@@ -33,31 +33,37 @@ def main(unused_args):
                 labels_indices.append(composer)
 
     all_vectors = []
+    composer_lengths = []
     for composer in composers:
-        all_vectors += [x for x in composers[composer]]
+        # tf.logging.info(len(composers[composer]))
+        # tf.logging.info(composers[composer][0].shape)
+        cur_vectors = list(np.array([x for l in composers[composer] for x in l]))
+        all_vectors += cur_vectors
+        composer_lengths.append(len(cur_vectors))
 
     all_vectors = np.array(all_vectors) 
-    all_targets = [y for x in composers for y in [x]*len(composers[x])]
+    all_targets = [y for i, x in enumerate(composers) for y in [x]*composer_lengths[i]]
 
     projections = {"PCA": PCA, "TSNE": TSNE}
     tf.logging.info("Using " + FLAGS.projection)
+
     components = None
     if FLAGS.projection == "TSNE":
-        # components = PCA(n_components=50).fit_transform(all_vectors)
-        # components = TSNE(n_components=2, perplexity=20, n_iter=3000, verbose=1).fit_transform(components)
-        components = manifold.Isomap(n_neighbors=10, n_components=2, n_jobs=-1).fit_transform(all_vectors)
+        components = PCA(n_components=256).fit_transform(all_vectors)
+        components = TSNE(n_components=2, perplexity=200, n_iter=10000, verbose=1).fit_transform(components)
+        # components = manifold.Isomap(n_neighbors=20, n_components=2, n_jobs=-1).fit_transform(all_vectors)
     else:
         components = PCA(n_components=2).fit_transform(all_vectors)
 
-    fig = plt.figure(figsize = (12,12))
+    fig = plt.figure(figsize = (10,10))
     ax = fig.add_subplot(1,1,1)#, projection='3d') 
     ax.set_xlabel('Principal Component 1', fontsize = 15)
     ax.set_ylabel('Principal Component 2', fontsize = 15)
     # ax.set_zlabel('Principal Component 3', fontsize = 15)
-    ax.set_title('2 component ' + FLAGS.projection, fontsize = 20)
+    ax.set_title(os.path.dirname(FLAGS.input_dir) + ': 2 component ' + FLAGS.projection, fontsize = 20)
 
 
-    colours = ['b', 'c', 'm', 'y']
+    colours = ['y', 'r', 'm', 'b']
     indices = [len(composers[composer]) for composer in composers]
     curIndex = [0, indices[0]]
     for label, colour, index in zip(labels, colours, indices):
