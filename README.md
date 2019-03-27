@@ -4,6 +4,12 @@
 [![Build Status](https://travis-ci.org/tensorflow/magenta.svg?branch=master)](https://travis-ci.org/tensorflow/magenta)
  [![PyPI version](https://badge.fury.io/py/magenta.svg)](https://badge.fury.io/py/magenta)
 
+2194437m
+Salman Mohammadi
+L4 Project
+
+This fork builds upon the repo. Follow the same instructions below to set-up your evironment.
+
 **Magenta** is a research project exploring the role of machine learning
 in the process of creating art and music.  Primarily this
 involves developing new deep learning and reinforcement learning

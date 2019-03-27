@@ -258,9 +258,11 @@ def run_with_flags(generator):
   date_and_time = time.strftime('%Y-%m-%d_%H%M%S')
   digits = len(str(FLAGS.num_outputs))
   for i in range(FLAGS.num_outputs):
-    generated_sequence, states = None, None
-    generated_sequence, states = generator.generate(primer_sequence, generator_options)
-    tf.logging.info(os.path.basename(primer_midi))
+    generated_sequence, states, composer_softmaxes = None, None, None
+    generated_sequence, states, composer_softmaxes = generator.generate(primer_sequence, generator_options)
+    if composer_softmaxes:
+      composer_softmaxes = np.array([x for l in composer_softmaxes for x in l])
+    # tf.logging.info(os.path.basename(primer_midi))
     
     midi_filename = '%s_%s.mid' % (date_and_time, str(i + 1).zfill(digits))
     midi_path = os.path.join(output_dir, midi_filename)
@@ -268,15 +270,33 @@ def run_with_flags(generator):
       midi_filename = os.path.basename(primer_midi)
       midi_path = os.path.join(output_dir, midi_filename)
       generated_sequence = magenta.music.split_note_sequence(generated_sequence, FLAGS.eval_split)[1]
-
-    magenta.music.sequence_proto_to_midi_file(generated_sequence, midi_path)
+      magenta.music.sequence_proto_to_midi_file(generated_sequence, midi_path)
 
     if FLAGS.return_states:
       states = np.array([np.array(x.rnn_state[-1]) for l in states for x in l])
-      if FLAGS.sample:
-        states = states[np.random.choice(states.shape[0], FLAGS.sample, replace=False), :]
-      else:
-        states = states.mean(axis=0)
+
+      num_states = int(len(states) * 0.1)
+      if composer_softmaxes:
+        orderings = (lambda o: [(lambda y: max(y))(z) for z in o])(composer_softmaxes)
+
+        orderings = np.argsort(orderings)[::-1]
+        
+
+        composers = ["chopin", "bach", "debussy", "beethoven"]
+        composers = {i:k for i, k in enumerate(composers)}
+
+        # tf.logging.info("Average classifier loss %f", np.mean(composer_softmaxes[orderings][:num_states], axis=0))
+        states = states[:num_states]
+
+      # states = np.random.choice(states, num_states)
+      # states = np.median(states, axis=0)
+
+      # if FLAGS.sample:
+      #   if FLAGS.sample != -1:
+      states = states[np.random.choice(states.shape[0], num_states, replace=False), :]
+      states = np.median(states, axis=0)
+      # else:
+      #   states = states.mean(axis=0)
       file = FLAGS.state_file + '_' +  str(i) + midi_filename + '.dump'
       with open(file, 'wb') as fp:
         pickle.dump(states, fp)

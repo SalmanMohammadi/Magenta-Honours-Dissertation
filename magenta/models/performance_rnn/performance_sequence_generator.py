@@ -217,6 +217,7 @@ class PerformanceRnnSequenceGenerator(mm.BaseSequenceGenerator):
       performance.set_length(min(performance.max_shift_steps, total_steps))
 
     states = []
+    composer_softmaxes = []
     while performance.num_steps < total_steps:
       # Assume the average specified (or default) note density and 4 RNN steps
       # per note. Can't know for sure until generation is finished because the
@@ -229,9 +230,12 @@ class PerformanceRnnSequenceGenerator(mm.BaseSequenceGenerator):
           'Need to generate %d more steps for this sequence, will try asking '
           'for %d RNN steps' % (steps_to_gen, rnn_steps_to_gen))
       
-      performance, cur_states = self._model.generate_performance(
+      performance, cur_states, softmaxes = self._model.generate_performance(
           len(performance) + rnn_steps_to_gen, performance, **args)
       states.append(cur_states)
+      if softmaxes is not None:
+        composer_softmaxes.append(softmaxes)
+        
       if not self.fill_generate_section:
         # In the interest of speed just go through this loop once, which may not
         # entirely fill the generate section.
@@ -244,7 +248,7 @@ class PerformanceRnnSequenceGenerator(mm.BaseSequenceGenerator):
 
     assert (generated_sequence.total_time - generate_section.end_time) <= 1e-5
 
-    return generated_sequence, states
+    return generated_sequence, states, composer_softmaxes
 
 
 

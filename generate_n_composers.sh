@@ -4,7 +4,7 @@
 
 #1 - 
 
-for dir in ./data/test/*
+for dir in $1*
 do
 	#dir=$("$dir"/*"")
 	curdir="$(basename $dir"/")"
@@ -14,7 +14,7 @@ do
 		for f in $file
 		do
 			#echo $f
-			python  magenta/models/performance_rnn/performance_rnn_generate.py --bundle_file=$3 --output_dir=$2$curdir"/" --config=performance_with_dynamics --num_outputs=1 --num_steps=1000 --primer_midi=$f --return_states --state_file=$2$curdir/dump --sample=10
+			python  magenta/models/performance_rnn/performance_rnn_generate.py --bundle_file=$3 --output_dir=$2$curdir"/" --config=performance_with_dynamics --num_outputs=1 --num_steps=1000 --primer_midi=$f --return_states --state_file=$2$curdir/dump #--eval --eval_split=20
 		done
 		##curdir="$(basename $dir"/")"
 		#echo $file

@@ -114,6 +114,7 @@ class EventSequenceRnnModel(mm.BaseModel):
     graph_final_state = self._session.graph.get_collection('final_state')
     graph_softmax = self._session.graph.get_collection('softmax')[0]
     graph_temperature = self._session.graph.get_collection('temperature')
+    composer_softmax = self._session.graph.get_collection('composer_softmax')
 
     feed_dict = {graph_inputs: inputs,
                  tuple(graph_initial_state): initial_state}
@@ -121,8 +122,13 @@ class EventSequenceRnnModel(mm.BaseModel):
     # placeholder exists in the graph.
     if graph_temperature:
       feed_dict[graph_temperature[0]] = temperature
-    final_state, softmax = self._session.run(
-        [graph_final_state, graph_softmax], feed_dict)
+
+    if composer_softmax:
+      final_state, softmax, composer_softmax = self._session.run(
+          [graph_final_state, graph_softmax, composer_softmax], feed_dict)
+    else:
+      final_state, softmax = self._session.run(
+          [graph_final_state, graph_softmax], feed_dict)
 
     if isinstance(softmax, list):
       if softmax[0].shape[1] > 1:
@@ -156,10 +162,12 @@ class EventSequenceRnnModel(mm.BaseModel):
     else:
       p = softmax[range(len(event_sequences)), -1, indices]
 
+    if composer_softmax:
+      return final_state, loglik + np.log(p), composer_softmax
     return final_state, loglik + np.log(p)
 
   def _generate_step(self, event_sequences, model_states, logliks, temperature,
-                     extend_control_events_callback=None,
+                     composer_softmax=None, extend_control_events_callback=None,
                      modify_events_callback=None):
     """Extends a list of event sequences by a single step each.
 
@@ -211,6 +219,8 @@ class EventSequenceRnnModel(mm.BaseModel):
 
     final_states = []
     logliks = np.array(logliks, dtype=np.float32)
+    if composer_softmax:
+      composer_softmax = np.array(composer_softmax, dtype=np.float32)
 
     # Add padding to fill the final batch.
     pad_amt = -len(event_sequences) % batch_size
@@ -223,14 +233,20 @@ class EventSequenceRnnModel(mm.BaseModel):
       i, j = b * batch_size, (b + 1) * batch_size
       pad_amt = max(0, j - num_seqs)
       # Generate a single step for one batch of event sequences.
-      batch_final_state, batch_loglik = self._generate_step_for_batch(
+      values = self._generate_step_for_batch(
           padded_event_sequences[i:j],
           padded_inputs[i:j],
           state_util.batch(padded_initial_states[i:j], batch_size),
           temperature)
+      if len(values) == 3:
+        batch_final_state, batch_loglik, composer_softmax = values
+        composer_softmax = composer_softmax[0]
+      else:
+        batch_final_state, batch_loglik = values
       final_states += state_util.unbatch(
           batch_final_state, batch_size)[:j - i - pad_amt]
       logliks[i:j - pad_amt] += batch_loglik[:j - i - pad_amt]
+      
 
     # Construct inputs for next step.
     if extend_control_events_callback is not None:
@@ -257,7 +273,8 @@ class EventSequenceRnnModel(mm.BaseModel):
                     for inputs, final_state, control_events, control_state
                     in zip(next_inputs, final_states,
                            control_sequences, control_states)]
-
+    if not composer_softmax == []:
+      return event_sequences, model_states, logliks, composer_softmax
     return event_sequences, model_states, logliks
 
   def _generate_events(self, num_steps, primer_events, temperature=1.0,
@@ -366,19 +383,35 @@ class EventSequenceRnnModel(mm.BaseModel):
         extend_control_events_callback if control_events is not None else None,
         modify_events_callback=modify_events_callback)
 
-    events, _, loglik, states = beam_search(
-        initial_sequence=event_sequences[0],
-        initial_state=initial_state,
-        generate_step_fn=generate_step_fn,
-        num_steps=num_steps - len(primer_events),
-        beam_size=beam_size,
-        branch_factor=branch_factor,
-        steps_per_iteration=steps_per_iteration)
+    if self._session.graph.get_collection('composer_softmax'):
+      events, _, loglik, states, composer_softmax = beam_search(
+          initial_sequence=event_sequences[0],
+          initial_state=initial_state,
+          generate_step_fn=generate_step_fn,
+          num_steps=num_steps - len(primer_events),
+          beam_size=beam_size,
+          branch_factor=branch_factor,
+          steps_per_iteration=steps_per_iteration,
+          composer=True)
 
-    tf.logging.info('Beam search yields sequence with log-likelihood: %f ',
+      tf.logging.info('Beam search yields sequence with log-likelihood: %f ',
                     loglik)
+      return events, states, composer_softmax
+    else:
+      events, _, loglik, states = beam_search(
+          initial_sequence=event_sequences[0],
+          initial_state=initial_state,
+          generate_step_fn=generate_step_fn,
+          num_steps=num_steps - len(primer_events),
+          beam_size=beam_size,
+          branch_factor=branch_factor,
+          steps_per_iteration=steps_per_iteration)
 
-    return events, states
+      tf.logging.info('Beam search yields sequence with log-likelihood: %f ',
+                    loglik)
+      return events, states, None
+
+    
 
   def _evaluate_batch_log_likelihood(self, event_sequences, inputs,
                                      initial_state):

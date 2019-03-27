@@ -18,7 +18,7 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-
+import numpy as np
 import collections
 import copy
 import heapq
@@ -27,10 +27,10 @@ import heapq
 # information needed to extend the sequence, and c) a score for the current
 # sequence e.g. log-likelihood.
 BeamEntry = collections.namedtuple('BeamEntry', ['sequence', 'state', 'score'])
-
+ExtBeamEntry = collections.namedtuple('BeamEntry', ['sequence', 'state', 'score', 'composer_score'])
 
 def _generate_branches(beam_entries, generate_step_fn, branch_factor,
-                       num_steps):
+                       num_steps, composer=False):
   """Performs a single iteration of branch generation for beam search.
 
   This method generates `branch_factor` branches for each sequence in the beam,
@@ -57,15 +57,29 @@ def _generate_branches(beam_entries, generate_step_fn, branch_factor,
                      for entry in branched_entries]
     all_states = [copy.deepcopy(entry.state) for entry in branched_entries]
     all_scores = [entry.score for entry in branched_entries]
+    all_composer_scores = None
+    if composer:
+      all_composer_scores = [entry.composer_score for entry in beam_entries]
   else:
     # No need to make copies if there's no branching.
     all_sequences = [entry.sequence for entry in beam_entries]
     all_states = [entry.state for entry in beam_entries]
     all_scores = [entry.score for entry in beam_entries]
-
+    all_composer_scores = None
+    if composer:
+      all_composer_scores = [entry.composer_score for entry in beam_entries]
   for _ in range(num_steps):
-    all_sequences, all_states, all_scores = generate_step_fn(
-        all_sequences, all_states, all_scores)
+    if composer:
+      all_sequences, all_states, all_scores, all_composer_scores = generate_step_fn(
+        all_sequences, all_states, all_scores, composer_softmax=all_composer_scores)
+    else:
+      all_sequences, all_states, all_scores, _ = generate_step_fn(
+          all_sequences, all_states, all_scores)
+
+  if composer:
+    return [ExtBeamEntry(sequence, state, score, composer_score)
+          for sequence, state, score, composer_score
+          in zip(all_sequences, all_states, all_scores, all_composer_scores)]
 
   return [BeamEntry(sequence, state, score)
           for sequence, state, score
@@ -81,7 +95,7 @@ def _prune_branches(beam_entries, k):
 
 
 def beam_search(initial_sequence, initial_state, generate_step_fn, num_steps,
-                beam_size, branch_factor, steps_per_iteration):
+                beam_size, branch_factor, steps_per_iteration, composer=False):
   """Generates a sequence using beam search.
 
   Initially, the beam is filled with `beam_size` copies of the initial sequence.
@@ -123,29 +137,39 @@ def beam_search(initial_sequence, initial_state, generate_step_fn, num_steps,
   sequences = [copy.deepcopy(initial_sequence) for _ in range(beam_size)]
   states = [copy.deepcopy(initial_state) for _ in range(beam_size)]
   scores = [0] * beam_size
-
-  beam_entries = [BeamEntry(sequence, state, score)
-                  for sequence, state, score
-                  in zip(sequences, states, scores)]
-
+  if composer:
+    composer_softmaxes = []
+    composer_scores = [[0, 0, 0, 0]] * beam_size
+    beam_entries = [ExtBeamEntry(sequence, state, score, composer_score)
+                    for sequence, state, score, composer_score
+                    in zip(sequences, states, scores, composer_scores)]
+  else:
+    beam_entries = [BeamEntry(sequence, state, score)
+                    for sequence, state, score
+                    in zip(sequences, states, scores)]
   # Choose the number of steps for the first iteration such that subsequent
   # iterations can all take the same number of steps.
   first_iteration_num_steps = (num_steps - 1) % steps_per_iteration + 1
   states = []
+  
   beam_entries = _generate_branches(
-      beam_entries, generate_step_fn, branch_factor, first_iteration_num_steps)
-
+      beam_entries, generate_step_fn, branch_factor, first_iteration_num_steps, composer=composer)
   num_iterations = (num_steps -
                     first_iteration_num_steps) // steps_per_iteration
 
   for _ in range(num_iterations):
     beam_entries = _prune_branches(beam_entries, k=beam_size)
     [states.append(beam_entry.state) for beam_entry in beam_entries]
+    if composer:
+      [composer_softmaxes.append(beam_entry.composer_score) for beam_entry in beam_entries]
     beam_entries = _generate_branches(
-        beam_entries, generate_step_fn, branch_factor, steps_per_iteration)
+        beam_entries, generate_step_fn, branch_factor, steps_per_iteration, composer=composer)
 
   # Prune to the single best beam entry.
   beam_entry = _prune_branches(beam_entries, k=1)[0]
   states.append(beam_entry.state)
 
+  if composer:
+    composer_softmaxes.append(beam_entry.composer_score)
+    return beam_entry.sequence, beam_entry.state, beam_entry.score, states, composer_softmaxes
   return beam_entry.sequence, beam_entry.state, beam_entry.score, states

@@ -54,6 +54,9 @@ tf.app.flags.DEFINE_integer(
 tf.app.flags.DEFINE_integer(
   'batch_size', 64,
   'Batch size')
+tf.app.flags.DEFINE_float(
+  'classifier_weight', None,
+  'classifier weight')
 tf.app.flags.DEFINE_string(
     'hparams', '',
     'Comma-separated list of `name=value` pairs. For each pair, the value of '
@@ -78,12 +81,21 @@ def main(unused_argv):
 
   layers = FLAGS.layers
   batch_size = 1
-
-  config = LSTMConfig(
-    encoder_decoder=encoder_decoder,
-    gpu=FLAGS.gpu,
-    layers=layers,
-    batch_size=batch_size)
+  
+  if FLAGS.classifier_weight:
+     config = LSTMConfig(
+      encoder_decoder=encoder_decoder,
+      gpu=FLAGS.gpu,
+      layers=layers,
+      batch_size=batch_size,
+      label_classifier_weight=FLAGS.classifier_weight,
+      label_classifier_units=4)
+  else:
+    config = LSTMConfig(
+      encoder_decoder=encoder_decoder,
+      gpu=FLAGS.gpu,
+      layers=layers,
+      batch_size=batch_size)
 
   model = model_dict[FLAGS.model](config, 'generate')
   number = FLAGS.checkpoint_number

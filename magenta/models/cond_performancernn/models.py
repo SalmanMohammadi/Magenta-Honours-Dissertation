@@ -259,8 +259,6 @@ class LSTMModel(BaseModel):
             if config.label_classifier_weight:
                 composer_logits = tf.layers.dense(final_state[-1].h, config.label_classifier_units)
                 composer_predictions = tf.argmax(composer_logits, axis=1)
-                composer_softmax_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
-                      labels=composers, logits=composer_logits)
 
             if mode in ('train', 'eval'):
               labels_flat = mg.common.flatten_maybe_padded_sequences(
@@ -270,6 +268,10 @@ class LSTMModel(BaseModel):
               softmax_cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
                     labels=labels_flat, logits=logits_flat)
               softmax_cross_entropy = tf.debugging.check_numerics(softmax_cross_entropy, "softmax_cross_entropy invalid")
+
+              if config.label_classifier_weight:
+                composer_softmax_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
+                        labels=composers, logits=composer_logits)
 
               predictions_flat = tf.argmax(logits_flat, axis=1)
               correct_predictions = tf.to_float(
@@ -362,6 +364,10 @@ class LSTMModel(BaseModel):
 
                 tf.add_to_collection('global_step', global_step)
             elif mode == 'generate':
+              if config.label_classifier_weight:
+                composer_softmax = tf.nn.softmax(composer_logits)
+                tf.add_to_collection("composer_softmax", composer_softmax)
+
               temperature = tf.placeholder(tf.float32, [])
               softmax_flat = tf.nn.softmax(
                     tf.div(logits_flat, tf.fill([num_classes], temperature)))
