@@ -9,6 +9,8 @@ Salman Mohammadi
 L4 Project
 
 This fork builds upon the repo. Follow the same instructions below to set-up your evironment.
+This adds the `cond-performancernn` model, and modifies much of the existing codebase to allow for e.g. inspection of LSTM weights.
+
 
 **Magenta** is a research project exploring the role of machine learning
 in the process of creating art and music.  Primarily this
